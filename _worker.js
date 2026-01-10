@@ -1,4 +1,5 @@
-﻿import { connect } from "cloudflare:sockets";
+﻿import { DurableObject } from 'cloudflare:workers';
+import { connect } from "cloudflare:sockets";
 let config_JSON, 反代IP = '', 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {};
 let 缓存反代IP, 缓存反代解析数组, 缓存反代数组索引 = 0, 启用反代兜底 = true;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
@@ -282,7 +283,7 @@ export default {
 
                             订阅内容 = 其他节点LINK + 完整优选IP.map(原始地址 => {
                                 // 统一正则: 匹配 域名/IPv4/IPv6地址 + 可选端口 + 可选备注
-                                // 示例: 
+                                // 示例:
                                 //   - 域名: hj.xmm1993.top:2096#备注 或 example.com
                                 //   - IPv4: 166.0.188.128:443#Los Angeles 或 166.0.188.128
                                 //   - IPv6: [2606:4700::]:443#CMCC 或 [2606:4700::]
@@ -335,8 +336,16 @@ export default {
                 } else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
             } else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
         } else if (管理员密码) {// ws代理
-            await 反代参数获取(request);
-            return await 处理WS请求(request, userID);
+            // --------- WebSocket 请求：把完整 Request 转发给 Durable Object ----------
+            // https://developers.cloudflare.com/durable-objects/reference/data-location/#supported-locations-1
+            // https://where.durableobjects.live/
+            // 可选：["wnam", "enam", "sam", "weur", "eeur", "apac", "oc", "afr", "me"]
+            const doLocation = env.REGION || "apac";
+            const clientIP = request.headers.get('CF-Connecting-IP');
+            const name = `user-${doLocation}-${userID}-${clientIP}`;
+            const id = env.WS_DO2.idFromName(name);
+            const stub = env.WS_DO2.get(id, {locationHint: doLocation });
+            return await stub.fetch(request);
         }
 
         let 伪装页URL = env.URL || 'nginx';
@@ -365,6 +374,37 @@ export default {
         return new Response(await nginx(), { status: 200, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
     }
 };
+
+/* ------------------- Durable Object 本体 ------------------- */
+export class WsDo2 extends DurableObject {
+
+    /**
+     * 构造函数
+     * @param state
+     * @param env
+     */
+    constructor(state, env) {
+        super(state, env);
+        this.env = env;
+    }
+
+    /**
+     * @param {Request} request
+     * @returns {Promise<Response>}
+     */
+    async fetch(request) {
+        const env = this.env;
+        const 管理员密码 = env.ADMIN || env.admin || env.PASSWORD || env.password || env.pswd || env.TOKEN || env.KEY || env.UUID || env.uuid;
+        const 加密秘钥 = env.KEY || '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改';
+        const userIDMD5 = await MD5MD5(管理员密码 + 加密秘钥);
+        const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+        const envUUID = env.UUID || env.uuid;
+        const userId = (envUUID && uuidRegex.test(envUUID)) ? envUUID.toLowerCase() : [userIDMD5.slice(0, 8), userIDMD5.slice(8, 12), '4' + userIDMD5.slice(13, 16), '8' + userIDMD5.slice(17, 20), userIDMD5.slice(20)].join('-');
+        await 反代参数获取(request);
+        return await 处理WS请求(request, userId);
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
 async function 处理WS请求(request, yourUUID) {
     const wssPair = new WebSocketPair();
@@ -569,7 +609,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         } else {
             console.log(`[反代连接] 代理到: ${host}:${portNum}`);
             const 所有反代数组 = await 解析地址端口(反代IP, host, yourUUID);
-            newSocket = await connectDirect(atob('UFJPWFlJUC50cDEuMDkwMjI3Lnh5eg=='), 1, rawData, 所有反代数组, 启用反代兜底);
+            newSocket = await connectDirect('ProxyIP.CMLiussss.net', 443, rawData, 所有反代数组, 启用反代兜底);
         }
         remoteConnWrapper.socket = newSocket;
         newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));

@@ -578,6 +578,9 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                     continue;
                 }
             }
+            //重试完毕所有反代IP，说明所有IP均不可用，清空，下次请求重新解析反代
+            缓存反代数组索引 = 0;
+            缓存反代解析数组 = null;
         }
 
         if (反代兜底) {
@@ -1676,7 +1679,7 @@ async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com',
         let 随机种子 = [...(目标根域名 + UUID)].reduce((a, c) => a + c.charCodeAt(0), 0);
         console.log(`[反代解析] 随机种子: ${随机种子}\n目标站点: ${目标根域名}`)
         const 洗牌后 = [...排序后数组].sort(() => (随机种子 = (随机种子 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
-        缓存反代解析数组 = 洗牌后.slice(0, 8);
+        缓存反代解析数组 = 洗牌后.slice(0, 10);
         console.log(`[反代解析] 解析完成 总数: ${缓存反代解析数组.length}个\n${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
         缓存反代IP = proxyIP;
     } else console.log(`[反代解析] 读取缓存 总数: ${缓存反代解析数组.length}个\n${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);

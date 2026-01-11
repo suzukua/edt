@@ -341,8 +341,7 @@ export default {
             // https://where.durableobjects.live/
             // 可选：["wnam", "enam", "sam", "weur", "eeur", "apac", "oc", "afr", "me"]
             const doLocation = env.REGION || "apac";
-            const clientIP = request.headers.get('CF-Connecting-IP');
-            const name = `user-${doLocation}-${userID}-${clientIP}`;
+            const name = `user-${doLocation}-${userID}`;
             const id = env.WS_DO2.idFromName(name);
             const stub = env.WS_DO2.get(id, {locationHint: doLocation });
             return await stub.fetch(request);

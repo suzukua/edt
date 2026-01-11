@@ -344,7 +344,9 @@ export default {
             const name = `user-${doLocation}-${userID}`;
             const id = env.WS_DO2.idFromName(name);
             const stub = env.WS_DO2.get(id, {locationHint: doLocation });
-            return await stub.fetch(request);
+            const newRequest = new Request(request)
+            newRequest.headers.append("userid", userID)
+            return await stub.fetch(newRequest);
         }
 
         let 伪装页URL = env.URL || 'nginx';
@@ -384,7 +386,6 @@ export class WsDo2 extends DurableObject {
      */
     constructor(state, env) {
         super(state, env);
-        this.env = env;
     }
 
     /**
@@ -392,13 +393,7 @@ export class WsDo2 extends DurableObject {
      * @returns {Promise<Response>}
      */
     async fetch(request) {
-        const env = this.env;
-        const 管理员密码 = env.ADMIN || env.admin || env.PASSWORD || env.password || env.pswd || env.TOKEN || env.KEY || env.UUID || env.uuid;
-        const 加密秘钥 = env.KEY || '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改';
-        const userIDMD5 = await MD5MD5(管理员密码 + 加密秘钥);
-        const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-        const envUUID = env.UUID || env.uuid;
-        const userId = (envUUID && uuidRegex.test(envUUID)) ? envUUID.toLowerCase() : [userIDMD5.slice(0, 8), userIDMD5.slice(8, 12), '4' + userIDMD5.slice(13, 16), '8' + userIDMD5.slice(17, 20), userIDMD5.slice(20)].join('-');
+        const userId = request.headers.get('userid');
         await 反代参数获取(request);
         return await 处理WS请求(request, userId);
     }

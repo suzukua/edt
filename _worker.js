@@ -344,9 +344,7 @@ export default {
             const name = `user-${doLocation}-${userID}`;
             const id = env.WS_DO2.idFromName(name);
             const stub = env.WS_DO2.get(id, {locationHint: doLocation });
-            const newRequest = new Request(request)
-            newRequest.headers.append("userid", userID)
-            return await stub.fetch(newRequest);
+            return await stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": userID}});
         }
 
         let 伪装页URL = env.URL || 'nginx';

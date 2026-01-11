@@ -567,8 +567,11 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                         new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时')), 1000))
                     ]);
                     const testWriter = remoteSock.writable.getWriter();
-                    await testWriter.write(data);
-                    testWriter.releaseLock();
+                    try {
+                        await testWriter.write(data);
+                    } finally {
+                        testWriter.releaseLock(); // 无论成功失败，必须释放锁
+                    }
                     console.log(`[反代连接] 成功连接到: ${反代地址}:${反代端口}`);
                     缓存反代数组索引 = 反代数组索引;
                     return remoteSock;

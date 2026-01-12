@@ -1451,12 +1451,12 @@ async function 反代参数获取(request) {
     if (searchParams.has('proxyip')) {
         const 路参IP = searchParams.get('proxyip');
         反代IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
-        启用反代兜底 = false;
+        // 启用反代兜底 = false;
         return;
     } else if (proxyMatch) {
         const 路参IP = proxyMatch[1] === 'proxyip.' ? `proxyip.${proxyMatch[2]}` : proxyMatch[2];
         反代IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
-        启用反代兜底 = false;
+        // 启用反代兜底 = false;
         return;
     }
 

@@ -1,7 +1,7 @@
 #:schema node_modules/wrangler/config-schema.json
 name = "fastclass-vl21"
 main = "src/vIndex.js"
-compatibility_date = "2025-11-04"
+compatibility_date = "2025-11-17"
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/

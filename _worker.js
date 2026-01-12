@@ -5,31 +5,26 @@ let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0, 启�
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
 export default {
     async fetch(request, env, ctx) {
-        const url = new URL(request.url);
-        const userID = await getUUID(env);
-        const hosts = env.HOST ? (await 整理成数组(env.HOST)).map(h => h.toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0]) : [url.hostname];
-        if (管理员密码) {// ws代理
-            // --------- WebSocket 请求：把完整 Request 转发给 Durable Object ----------
-            // https://developers.cloudflare.com/durable-objects/reference/data-location/#supported-locations-1
-            // https://where.durableobjects.live/
-            // 可选：["wnam", "enam", "sam", "weur", "eeur", "apac", "oc", "afr", "me"]
-            const doLocation = env.REGION || "apac";
-            const name = `user-${doLocation}}`;
-            const id = env.WsBigDo.idFromName(name);
-            const stub = env.WsBigDo.get(id, {locationHint: doLocation });
-            return await stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": userID}});
-        } else {
-            return new Response(request.cf);
+        const upgradeHeader = request.headers.get('Upgrade');
+        if (upgradeHeader === 'websocket'){
+            const xxoo = env.xxoo;
+            if (xxoo) {// ws代理
+                await 返袋参数获取(request);
+                return await 处理WS请求(request, xxoo);
+            } else {
+                return Response.error("配置不正确")
+            }
         }
-    },
-
-    async scheduled(event, env, ctx) {
-        const doLocation = env.REGION || "apac";
-        const name = `user-${doLocation}}`;
-        const id = env.WsBigDo.idFromName(name);
-        const stub = env.WsBigDo.get(id, {locationHint: doLocation });
-        ctx.waitUntil(stub.doValidProxyIps());
+        return Response.json(request.cf);
     }
+
+    // async scheduled(event, env, ctx) {
+    //     const doLocation = env.REGION || "apac";
+    //     const name = `user-${doLocation}}`;
+    //     const id = env.WsBigDo.idFromName(name);
+    //     const stub = env.WsBigDo.get(id, {locationHint: doLocation });
+    //     ctx.waitUntil(stub.doValidProxyIps());
+    // }
 };
 
 /* ------------------- Durable Object 本体 ------------------- */

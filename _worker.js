@@ -371,6 +371,20 @@ export default {
             return 反代响应;
         } catch (error) { }
         return new Response(await nginx(), { status: 200, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+    },
+
+    async scheduled(event, env, ctx) {
+        const 管理员密码 = env.ADMIN || env.admin || env.PASSWORD || env.password || env.pswd || env.TOKEN || env.KEY || env.UUID || env.uuid;
+        const 加密秘钥 = env.KEY || '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改';
+        const userIDMD5 = await MD5MD5(管理员密码 + 加密秘钥);
+        const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+        const envUUID = env.UUID || env.uuid;
+        const userID = (envUUID && uuidRegex.test(envUUID)) ? envUUID.toLowerCase() : [userIDMD5.slice(0, 8), userIDMD5.slice(8, 12), '4' + userIDMD5.slice(13, 16), '8' + userIDMD5.slice(17, 20), userIDMD5.slice(20)].join('-');
+        const doLocation = env.REGION || "apac";
+        const name = `user-${doLocation}-${userID}`;
+        const id = env.WS_DO2.idFromName(name);
+        const stub = env.WS_DO2.get(id, {locationHint: doLocation });
+        ctx.waitUntil(stub.doValidProxyIps());
     }
 };
 
@@ -394,6 +408,10 @@ export class WsDo2 extends DurableObject {
         const userId = request.headers.get('userid');
         await 反代参数获取(request);
         return await 处理WS请求(request, userId);
+    }
+
+    async doValidProxyIps() {
+        return await validProxyIps();
     }
 }
 
@@ -1840,3 +1858,27 @@ async function html1101(host, 访问IP) {
 </html>`;
 }
 
+
+async function validProxyIps() {
+    // 耗时任务
+    console.log(`反代验证任务开始, ${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+    if (缓存反代解析数组 && 缓存反代解析数组.length > 0) {
+        for (let i = 0; i < 缓存反代解析数组.length; i++) {
+            const [ip, port] = 缓存反代解析数组[i];
+            const testApi = `https://check.proxyip.cmliussss.net/check?proxyip=${ip}:${port}`
+            const response = await fetch(testApi);
+            if (response.ok) {
+                const result = await response.json();
+                console.log(`[反代验证] ${ip}:${port} - 地区：${result.loc}--${result.city}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
+                if (result.success) {
+                    continue;
+                }
+            }
+            console.log(`[反代验证] ${ip}:${port} - 不可用，移除该项`);
+            // 如果不可用则移除该项
+            缓存反代解析数组.splice(i, 1);
+            i--; // 调整索引以避免跳过下一项
+        }
+    }
+    console.log(`反代验证任务结束, ${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+}

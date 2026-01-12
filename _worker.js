@@ -587,8 +587,11 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         if (反代兜底) {
             remoteSock = connect({ hostname: address, port: port });
             const writer = remoteSock.writable.getWriter();
-            await writer.write(data);
-            writer.releaseLock();
+            try {
+                await writer.write(data);
+            } finally {
+                writer.releaseLock(); // 无论成功失败，必须释放锁
+            }
             return remoteSock;
         } else {
             closeSocketQuietly(ws);
@@ -611,7 +614,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         }
         remoteConnWrapper.socket = newSocket;
         newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
-        connectStreams(newSocket, ws, respHeader, null);
+        connectStreams(newSocket, ws, respHeader, null, host, portNum);
     }
 
     const 验证SOCKS5白名单 = (addr) => SOCKS5白名单.some(p => new RegExp(`^${p.replace(/\*/g, '.*')}$`, 'i').test(addr));
@@ -626,9 +629,11 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         try {
             console.log(`[TCP转发] 尝试直连到: ${host}:${portNum}`);
             const initialSocket = await connectDirect(host, portNum, rawData);
+            console.log(`[TCP转发] 直连成功: ${host}:${portNum}`);
             remoteConnWrapper.socket = initialSocket;
-            connectStreams(initialSocket, ws, respHeader, connecttoPry);
+            connectStreams(initialSocket, ws, respHeader, connecttoPry, host, portNum);
         } catch (err) {
+            console.log(`[TCP转发] 直连失败: ${host}:${portNum}， 通过反代重试`);
             await connecttoPry();
         }
     }
@@ -673,7 +678,7 @@ function formatIdentifier(arr, offset = 0) {
     const hex = [...arr.slice(offset, offset + 16)].map(b => b.toString(16).padStart(2, '0')).join('');
     return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}`;
 }
-async function connectStreams(remoteSocket, webSocket, headerData, retryFunc) {
+async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, host, portNum) {
     let header = headerData, hasData = false;
     await remoteSocket.readable.pipeTo(
         new WritableStream({
@@ -696,6 +701,7 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc) {
         closeSocketQuietly(webSocket);
     });
     if (!hasData && retryFunc) {
+        console.log(`[connectStreams] ${host}:${portNum} 远程连接无数据返回，执行重试逻辑`);
         await retryFunc();
     }
 }
@@ -726,16 +732,16 @@ function makeReadableStr(socket, earlyDataHeader) {
 }
 
 function isSpeedTestSite(hostname) {
-    const speedTestDomains = [atob('c3BlZWQuY2xvdWRmbGFyZS5jb20=')];
-    if (speedTestDomains.includes(hostname)) {
-        return true;
-    }
-
-    for (const domain of speedTestDomains) {
-        if (hostname.endsWith('.' + domain) || hostname === domain) {
-            return true;
-        }
-    }
+    // const speedTestDomains = [atob('c3BlZWQuY2xvdWRmbGFyZS5jb20=')];
+    // if (speedTestDomains.includes(hostname)) {
+    //     return true;
+    // }
+    //
+    // for (const domain of speedTestDomains) {
+    //     if (hostname.endsWith('.' + domain) || hostname === domain) {
+    //         return true;
+    //     }
+    // }
     return false;
 }
 

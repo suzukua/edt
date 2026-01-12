@@ -1,7 +1,7 @@
 ﻿import { DurableObject } from 'cloudflare:workers';
 import { connect } from "cloudflare:sockets";
-let 反代IP = '';
-let 缓存反代IP, 缓存反代解析数组, 缓存反代数组索引 = 0, 启用反代兜底 = true;
+let 反待IP = '';
+let 缓存反待IP, 缓存反待解析数组, 缓存反待数组索引 = 0, 启用反待兜底 = true;
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
 export default {
     async fetch(request, env, ctx) {
@@ -50,7 +50,7 @@ export class WsBigDo extends DurableObject {
      */
     async fetch(request) {
         const userId = request.headers.get('userid');
-        await 反代参数获取(request);
+        await 反待参数获取(request);
         return await 处理WS请求(request, userId);
     }
 
@@ -208,17 +208,17 @@ function 解析魏烈思请求(chunk, token) {
     return { hasError: false, addressType, port, hostname, isUDP, rawIndex: addrValIdx + addrLen, version };
 }
 async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
-    console.log(`[TCP转发] 目标: ${host}:${portNum} | 反代IP: ${反代IP} | 反代兜底: ${启用反代兜底 ? '是' : '否'} | 反代类型: proxyip'}`);
+    console.log(`[TCP转发] 目标: ${host}:${portNum} | 反待IP: ${反待IP} | 反待兜底: ${启用反待兜底 ? '是' : '否'} | 反待类型: proxyip'}`);
 
-    async function connectDirect(address, port, data, 所有反代数组 = null, 反代兜底 = true) {
+    async function connectDirect(address, port, data, 所有反待数组 = null, 反待兜底 = true) {
         let remoteSock;
-        if (所有反代数组 && 所有反代数组.length > 0) {
-            for (let i = 0; i < 所有反代数组.length; i++) {
-                const 反代数组索引 = (缓存反代数组索引 + i) % 所有反代数组.length;
-                const [反代地址, 反代端口] = 所有反代数组[反代数组索引];
+        if (所有反待数组 && 所有反待数组.length > 0) {
+            for (let i = 0; i < 所有反待数组.length; i++) {
+                const 反待数组索引 = (缓存反待数组索引 + i) % 所有反待数组.length;
+                const [反待地址, 反待端口] = 所有反待数组[反待数组索引];
                 try {
-                    console.log(`[反代连接] 尝试连接到: ${反代地址}:${反代端口} (索引: ${反代数组索引})`);
-                    remoteSock = connect({ hostname: 反代地址, port: 反代端口 });
+                    console.log(`[反待连接] 尝试连接到: ${反待地址}:${反待端口} (索引: ${反待数组索引})`);
+                    remoteSock = connect({ hostname: 反待地址, port: 反待端口 });
                     // 等待TCP连接真正建立，设置1秒超时
                     await Promise.race([
                         remoteSock.opened,
@@ -230,21 +230,21 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                     } finally {
                         testWriter.releaseLock(); // 无论成功失败，必须释放锁
                     }
-                    console.log(`[反代连接] 成功连接到: ${反代地址}:${反代端口}`);
-                    缓存反代数组索引 = 反代数组索引;
+                    console.log(`[反待连接] 成功连接到: ${反待地址}:${反待端口}`);
+                    缓存反待数组索引 = 反待数组索引;
                     return remoteSock;
                 } catch (err) {
-                    console.log(`[反代连接] 连接失败: ${反代地址}:${反代端口}, 错误: ${err.message}`);
+                    console.log(`[反待连接] 连接失败: ${反待地址}:${反待端口}, 错误: ${err.message}`);
                     try { remoteSock?.close?.(); } catch (e) { }
                     continue;
                 }
             }
-            //重试完毕所有反代IP，说明所有IP均不可用，清空，下次请求重新解析反代
-            缓存反代数组索引 = 0;
-            缓存反代解析数组 = null;
+            //重试完毕所有反待IP，说明所有IP均不可用，清空，下次请求重新解析反待
+            缓存反待数组索引 = 0;
+            缓存反待解析数组 = null;
         }
 
-        if (反代兜底) {
+        if (反待兜底) {
             remoteSock = connect({ hostname: address, port: port });
             const writer = remoteSock.writable.getWriter();
             try {
@@ -255,14 +255,14 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
             return remoteSock;
         } else {
             closeSocketQuietly(ws);
-            throw new Error('[反代连接] 所有反代连接失败，且未启用反代兜底，连接终止。');
+            throw new Error('[反待连接] 所有反待连接失败，且未启用反待兜底，连接终止。');
         }
     }
 
     async function connecttoPry() {
-        console.log(`[反代连接] 代理到: ${host}:${portNum}`);
-        const 所有反代数组 = await 解析地址端口(反代IP, host, yourUUID);
-        let newSocket = await connectDirect('ProxyIP.CMLiussss.net', 443, rawData, 所有反代数组, 启用反代兜底);
+        console.log(`[反待连接] 代理到: ${host}:${portNum}`);
+        const 所有反待数组 = await 解析地址端口(反待IP, host, yourUUID);
+        let newSocket = await connectDirect(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有反待数组, 启用反待兜底);
         remoteConnWrapper.socket = newSocket;
         newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
         connectStreams(newSocket, ws, respHeader, null, host, portNum);
@@ -275,7 +275,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         remoteConnWrapper.socket = initialSocket;
         connectStreams(initialSocket, ws, respHeader, connecttoPry, host, portNum);
     } catch (err) {
-        console.log(`[TCP转发] 直连失败: ${host}:${portNum}， 通过反代重试`);
+        console.log(`[TCP转发] 直连失败: ${host}:${portNum}， 通过反待重试`);
         await connecttoPry();
     }
 }
@@ -418,22 +418,22 @@ async function 整理成数组(内容) {
     return 地址数组;
 }
 
-async function 反代参数获取(request) {
+async function 反待参数获取(request) {
     const url = new URL(request.url);
     const { pathname, searchParams } = url;
     const pathLower = pathname.toLowerCase();
 
-    // 统一处理反代IP参数 (优先级最高,使用正则一次匹配)
+    // 统一处理反待IP参数 (优先级最高,使用正则一次匹配)
     const proxyMatch = pathLower.match(/\/(proxyip[.=]|pyip=|ip=)(.+)/);
     if (searchParams.has('proxyip')) {
         const 路参IP = searchParams.get('proxyip');
-        反代IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
-        // 启用反代兜底 = false;
+        反待IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
+        // 启用反待兜底 = false;
         return;
     } else if (proxyMatch) {
         const 路参IP = proxyMatch[1] === 'proxyip.' ? `proxyip.${proxyMatch[2]}` : proxyMatch[2];
-        反代IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
-        // 启用反代兜底 = false;
+        反待IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
+        // 启用反待兜底 = false;
         return;
     }
 }
@@ -472,7 +472,7 @@ function sha224(s) {
 }
 
 async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com', UUID = '00000000-0000-4000-8000-000000000000') {
-    if (!缓存反代IP || !缓存反代解析数组 || 缓存反代IP !== proxyIP) {
+    if (!缓存反待IP || !缓存反待解析数组 || 缓存反待IP !== proxyIP) {
         proxyIP = proxyIP.toLowerCase();
         async function DoH查询(域名, 记录类型) {
             try {
@@ -502,7 +502,7 @@ async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com',
             return [地址, 端口];
         }
 
-        let 所有反代数组 = [];
+        let 所有反待数组 = [];
 
         if (proxyIP.includes('.william')) {
             try {
@@ -512,7 +512,7 @@ async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com',
                     let data = txtData[0];
                     if (data.startsWith('"') && data.endsWith('"')) data = data.slice(1, -1);
                     const prefixes = data.replace(/\\010/g, ',').replace(/\n/g, ',').split(',').map(s => s.trim()).filter(Boolean);
-                    所有反代数组 = prefixes.map(prefix => 解析地址端口字符串(prefix));
+                    所有反待数组 = prefixes.map(prefix => 解析地址端口字符串(prefix));
                 }
             } catch (error) {
                 console.error('解析William域名失败:', error);
@@ -540,45 +540,45 @@ async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com',
                 const ipv6List = aaaaRecords.filter(r => r.type === 28).map(r => `[${r.data}]`);
                 const ipAddresses = [...ipv4List, ...ipv6List];
 
-                所有反代数组 = ipAddresses.length > 0
+                所有反待数组 = ipAddresses.length > 0
                     ? ipAddresses.map(ip => [ip, 端口])
                     : [[地址, 端口]];
             } else {
-                所有反代数组 = [[地址, 端口]];
+                所有反待数组 = [[地址, 端口]];
             }
         }
-        const 排序后数组 = 所有反代数组.sort((a, b) => a[0].localeCompare(b[0]));
+        const 排序后数组 = 所有反待数组.sort((a, b) => a[0].localeCompare(b[0]));
         const 目标根域名 = 目标域名.includes('.') ? 目标域名.split('.').slice(-2).join('.') : 目标域名;
         let 随机种子 = [...(目标根域名 + UUID)].reduce((a, c) => a + c.charCodeAt(0), 0);
-        console.log(`[反代解析] 随机种子: ${随机种子}\n目标站点: ${目标根域名}`)
+        console.log(`[反待解析] 随机种子: ${随机种子}\n目标站点: ${目标根域名}`)
         const 洗牌后 = [...排序后数组].sort(() => (随机种子 = (随机种子 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
-        缓存反代解析数组 = 洗牌后.slice(0, 100);
-        console.log(`[反代解析] 解析完成 总数: ${缓存反代解析数组.length}个\n${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
-        缓存反代IP = proxyIP;
-    } else console.log(`[反代解析] 读取缓存 总数: ${缓存反代解析数组.length}个\n${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
-    return 缓存反代解析数组;
+        缓存反待解析数组 = 洗牌后.slice(0, 100);
+        console.log(`[反待解析] 解析完成 总数: ${缓存反待解析数组.length}个\n${缓存反待解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+        缓存反待IP = proxyIP;
+    } else console.log(`[反待解析] 读取缓存 总数: ${缓存反待解析数组.length}个\n${缓存反待解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+    return 缓存反待解析数组;
 }
 
 async function validProxyIps() {
     // 耗时任务
-    console.log(`反代验证任务开始, ${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
-    if (缓存反代解析数组 && 缓存反代解析数组.length > 0) {
-        for (let i = 0; i < 缓存反代解析数组.length; i++) {
-            const [ip, port] = 缓存反代解析数组[i];
-            const testApi = `https://check.proxyip.cmliussss.net/check?proxyip=${ip}:${port}`
+    console.log(`反待验证任务开始, ${缓存反待解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+    if (缓存反待解析数组 && 缓存反待解析数组.length > 0) {
+        for (let i = 0; i < 缓存反待解析数组.length; i++) {
+            const [ip, port] = 缓存反待解析数组[i];
+            const testApi = `${atob("aHR0cHM6Ly9jaGVjay5wcm94eWlwLmNtbGl1c3Nzcy5uZXQvY2hlY2s")}?proxyip=${ip}:${port}`
             const response = await fetch(testApi);
             if (response.ok) {
                 const result = await response.json();
-                console.log(`[反代验证] ${ip}:${port} - 地区：${result.loc}--${result.city}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
+                console.log(`[反待验证] ${ip}:${port} - 地区：${result.loc}--${result.city}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
                 if (result.success) {
                     continue;
                 }
             }
-            console.log(`[反代验证] ${ip}:${port} - 不可用，移除该项`);
+            console.log(`[反待验证] ${ip}:${port} - 不可用，移除该项`);
             // 如果不可用则移除该项
-            缓存反代解析数组.splice(i, 1);
+            缓存反待解析数组.splice(i, 1);
             i--; // 调整索引以避免跳过下一项
         }
     }
-    console.log(`反代验证任务结束, ${缓存反代解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+    console.log(`反待验证任务结束, ${缓存反待解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
 }

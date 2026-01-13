@@ -5,7 +5,7 @@
   "scripts": {
     "deploy": "wrangler deploy ./dist/_worker.js",
     "dev": "wrangler dev",
-    "build": "javascript-obfuscator _worker.js --output ./dist/_worker.js --target node --compact true --identifier-names-generator mangled --rename-globals true --string-array true --string-array-encoding rc4 --string-array-threshold 0.5 --transform-object-keys false --unicode-escape-sequence false --seed 234242424324242"
+    "build": "javascript-obfuscator _worker.js --output ./dist/_worker.js --target node --compact true --identifier-names-generator mangled --rename-globals true --string-array true --string-array-encoding none --string-array-threshold 0.5 --transform-object-keys false --unicode-escape-sequence false --seed 234242424324242"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.5.2",

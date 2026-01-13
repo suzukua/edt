@@ -781,6 +781,11 @@ async function 读取config_JSON(env, hostname, userID, path, 重置配置 = fal
                 total: 0,
                 max: 100000,
             },
+            DoUsage: {
+                success: false,
+                total: 0,
+                max: 13000,
+            },
         }
     };
 
@@ -844,7 +849,9 @@ async function 读取config_JSON(env, hostname, userID, path, 重置配置 = fal
                 config_JSON.CF.APIToken = CF_JSON.APIToken ? 掩码敏感信息(CF_JSON.APIToken) : null;
                 config_JSON.CF.UsageAPI = null;
                 const Usage = await getCloudflareUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, CF_JSON.AccountID, CF_JSON.APIToken);
+                const DoUsage = await getCloudflareDurableObjectsUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, '719b83cf74ac25d1754c4df7d280a64f', '6E0wIOSp0HrvLjioe0UtPlIK_f9pov94XO2YWHqH');
                 config_JSON.CF.Usage = Usage;
+                config_JSON.CF.DoUsage = DoUsage;
             }
         }
     } catch (error) {
@@ -1067,6 +1074,7 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken) {
     const cfg = { "Content-Type": "application/json" };
 
     try {
+        console.log(AccountID, Email, GlobalAPIKey)
         if (!AccountID && (!Email || !GlobalAPIKey)) return { success: false, pages: 0, workers: 0, total: 0, max: 100000 };
 
         if (!AccountID) {
@@ -1080,7 +1088,7 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken) {
             const idx = d.result.findIndex(a => a.name?.toLowerCase().startsWith(Email.toLowerCase()));
             AccountID = d.result[idx >= 0 ? idx : 0]?.id;
         }
-
+        console.log(AccountID)
         const now = new Date();
         now.setUTCHours(0, 0, 0, 0);
         const hdr = APIToken ? { ...cfg, "Authorization": `Bearer ${APIToken}` } : { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
@@ -1114,12 +1122,102 @@ async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken) {
         return { success: true, pages, workers, total, max };
 
     } catch (error) {
+        console.log(error)
         console.error('获取使用量错误:', error.message);
         return { success: false, pages: 0, workers: 0, total: 0, max: 100000 };
     }
 }
 
+async function getCloudflareDurableObjectsUsage(Email, GlobalAPIKey, AccountID, APIToken) {
+    const API = "https://api.cloudflare.com/client/v4";
+    const sum = (a) => a?.reduce((t, i) => t + (i?.sum?.activeTime || 0), 0) || 0;
+    const cfg = { "Content-Type": "application/json" };
 
+    try {
+        if (!AccountID && (!Email || !GlobalAPIKey)) return { success: false, total: 0, max: 13000 };
+
+        if (!AccountID) {
+            const r = await fetch(`${API}/accounts`, {
+                method: "GET",
+                headers: { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey }
+            });
+            if (!r.ok) throw new Error(`账户获取失败: ${r.status}`);
+            const d = await r.json();
+            if (!d?.result?.length) throw new Error("未找到账户");
+            const idx = d.result.findIndex(a => a.name?.toLowerCase().startsWith(Email.toLowerCase()));
+            AccountID = d.result[idx >= 0 ? idx : 0]?.id;
+        }
+
+        const now = new Date();
+        now.setUTCHours(0, 0, 0, 0);
+        const hdr = APIToken ? { ...cfg, "Authorization": `Bearer ${APIToken}` } : { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
+
+        const res = await fetch(`${API}/graphql`, {
+            method: "POST",
+            headers: hdr,
+            body: JSON.stringify({
+                query: `query getDurableObjectsListQuery($AccountID: string, $filter: ZoneWorkersRequestsFilter_InputObject) {
+                          viewer {
+                            accounts(filter: {accountTag: $AccountID}) {
+                              durableObjectsInvocationsAdaptiveGroups(limit: 10000, filter: $filter) {
+                                sum {
+                                  errors
+                                  requests
+                                  responseBodySize
+                                  __typename
+                                }
+                                dimensions {
+                                  namespaceId
+                                  datetimeHour
+                                  __typename
+                                }
+                                __typename
+                              }
+                              durableObjectsPeriodicGroups(limit: 10000, filter: $filter) {
+                                sum {
+                                  activeTime
+                                  storageDeletes
+                                  storageReadUnits
+                                  storageWriteUnits
+                                  rowsRead
+                                  rowsWritten
+                                  __typename
+                                }
+                                dimensions {
+                                  namespaceId
+                                  datetimeHour
+                                  __typename
+                                }
+                                __typename
+                              }
+                              __typename
+                            }
+                            __typename
+                          }
+                        }`,
+                variables: { AccountID, filter: { datetimeHour_geq: now.toISOString(), datetimeHour_leq: new Date().toISOString() } }
+            })
+        });
+
+        if (!res.ok) throw new Error(`查询失败: ${res.status}`);
+        const result = await res.json();
+        if (result.errors?.length) throw new Error(result.errors[0].message);
+
+        const acc = result?.data?.viewer?.accounts?.[0];
+        if (!acc) throw new Error("未找到账户数据");
+        function ceil2(num) {
+            return Math.ceil(num * 100) / 100;
+        }
+        const total = ceil2(sum(acc.durableObjectsPeriodicGroups)*(128/1024)/1000000000);
+        const max = 13000 ;
+        console.log(`统计结果 - Durable-Objects: ${total}, 上限: ${max}`);
+        return { success: true, total, max };
+
+    } catch (error) {
+        console.error('获取使用量错误:', error.message);
+        return { success: false, total: 0, max: 13000 };
+    }
+}
 
 async function SOCKS5可用性验证(代理协议 = 'socks5', 代理参数) {
     const startTime = Date.now();

@@ -1208,7 +1208,7 @@ async function getCloudflareDurableObjectsUsage(Email, GlobalAPIKey, AccountID, 
         function ceil2(num) {
             return Math.ceil(num * 100) / 100;
         }
-        const total = ceil2(sum(acc.durableObjectsPeriodicGroups)*(128/1024)/1000000000);
+        const total = ceil2(sum(acc.durableObjectsPeriodicGroups)*(128/1024)/1000000);
         const max = 13000 ;
         console.log(`统计结果 - Durable-Objects: ${total}, 上限: ${max}`);
         return { success: true, total, max };

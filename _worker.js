@@ -9,27 +9,25 @@ export default {
         const upgradeHeader = request.headers.get('Upgrade');
         if (upgradeHeader === 'websocket'){
             const xxoo = env.xxoo;
-            if (xxoo) {// ws代理
+            if (env.do) {
+                const stub = await getDo()
+                return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxoo}});
+            } else {
                 await 返袋参数获取(request);
                 return await 处理WS请求(request, xxoo);
-                // return await getDo(env).fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": userID}});
-            } else {
-                return Response.error("配置不正确")
             }
-
         }
         return Response.json(request.cf);
     }
 
     // async scheduled(event, env, ctx) {
-    //     ctx.waitUntil(getDo(env).doValidPxyIps());
+    //     ctx.waitUntil(getDo().doValidPxyIps());
     // }
 };
 
 
-function getDo(env){
-    const doLocation = env.REGION || "apac";
-    const name = `user-${doLocation}}`;
+function getDo(){
+    const name = `user-apac`;
     const id = env.WsBigDo.idFromName(name);
     return env.WsBigDo.get(id, {locationHint: doLocation})
 }
@@ -238,6 +236,8 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                 } catch (err) {
                     console.log(`[返袋连接] 连接失败: ${返袋地址}:${返袋端口}, 错误: ${err.message}`);
                     try { remoteSock?.close?.(); } catch (e) { }
+                    缓存返袋数组索引.splice(返袋数组索引, 1)
+                    i--; // 调整索引以避免跳过下一项
                     continue;
                 }
             }

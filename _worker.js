@@ -22,11 +22,7 @@ export default {
     }
 
     // async scheduled(event, env, ctx) {
-    //     const doLocation = env.REGION || "apac";
-    //     const name = `user-${doLocation}}`;
-    //     const id = env.WsBigDo.idFromName(name);
-    //     const stub = env.WsBigDo.get(id, {locationHint: doLocation });
-    //     ctx.waitUntil(stub.doValidProxyIps());
+    //     ctx.waitUntil(getDo(env).doValidPxyIps());
     // }
 };
 
@@ -60,8 +56,8 @@ export class WsBigDo extends DurableObject {
         return await 处理WS请求(request, userId);
     }
 
-    async doValidProxyIps() {
-        return await validProxyIps();
+    async doValidPxyIps() {
+        return await validPxyIps();
     }
 }
 
@@ -214,7 +210,7 @@ function 解析魏烈思请求(chunk, token) {
     return { hasError: false, addressType, port, hostname, isUDP, rawIndex: addrValIdx + addrLen, version };
 }
 async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
-    console.log(`[TCP转发] 目标: ${host}:${portNum} | 返袋IP: ${返袋IP} | 返袋兜底: ${启用返袋兜底 ? '是' : '否'} | 返袋类型: proxyip'}`);
+    console.log(`[TCP转发] 目标: ${host}:${portNum} | 返袋IP: ${返袋IP} | 返袋兜底: ${启用返袋兜底 ? '是' : '否'} | 返袋类型: pryip'}`);
 
     async function connectDirect(address, port, data, 所有返袋数组 = null, 返袋兜底 = true) {
         let remoteSock;
@@ -447,9 +443,9 @@ function sha224(s) {
     return hex;
 }
 
-async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com', UUID = '00000000-0000-4000-8000-000000000000') {
-    if (!缓存返袋IP || !缓存返袋解析数组 || 缓存返袋IP !== proxyIP) {
-        proxyIP = proxyIP.toLowerCase();
+async function 解析地址端口(pryip, 目标域名 = 'dash.cloudflare.com', UUID = '00000000-0000-4000-8000-000000000000') {
+    if (!缓存返袋IP || !缓存返袋解析数组 || 缓存返袋IP !== pryip) {
+        pryip = pryip.toLowerCase();
         async function DoH查询(域名, 记录类型) {
             try {
                 const response = await fetch(`https://1.1.1.1/dns-query?name=${域名}&type=${记录类型}`, {
@@ -480,9 +476,9 @@ async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com',
 
         let 所有返袋数组 = [];
 
-        if (proxyIP.includes('.william')) {
+        if (pryip.includes('.william')) {
             try {
-                const txtRecords = await DoH查询(proxyIP, 'TXT');
+                const txtRecords = await DoH查询(pryip, 'TXT');
                 const txtData = txtRecords.filter(r => r.type === 16).map(r => r.data);
                 if (txtData.length > 0) {
                     let data = txtData[0];
@@ -494,10 +490,10 @@ async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com',
                 console.error('解析William域名失败:', error);
             }
         } else {
-            let [地址, 端口] = 解析地址端口字符串(proxyIP);
+            let [地址, 端口] = 解析地址端口字符串(pryip);
 
-            if (proxyIP.includes('.tp')) {
-                const tpMatch = proxyIP.match(/\.tp(\d+)/);
+            if (pryip.includes('.tp')) {
+                const tpMatch = pryip.match(/\.tp(\d+)/);
                 if (tpMatch) 端口 = parseInt(tpMatch[1], 10);
             }
 
@@ -530,12 +526,12 @@ async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com',
         const 洗牌后 = [...排序后数组].sort(() => (随机种子 = (随机种子 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
         缓存返袋解析数组 = 洗牌后.slice(0, 100);
         console.log(`[返袋解析] 解析完成 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
-        缓存返袋IP = proxyIP;
+        缓存返袋IP = pryip;
     } else console.log(`[返袋解析] 读取缓存 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
     return 缓存返袋解析数组;
 }
 
-async function validProxyIps() {
+async function validPxyIps() {
     // 耗时任务
     console.log(`返袋验证任务开始, ${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
     if (缓存返袋解析数组 && 缓存返袋解析数组.length > 0) {

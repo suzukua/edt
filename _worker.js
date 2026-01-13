@@ -110,31 +110,31 @@ export default {
                             // 验证配置完整性
                             if (!newConfig.UUID || !newConfig.HOST) return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 
-                            // 保存到 KV
-                            await env.KV.put('config.json', JSON.stringify(newConfig, null, 2));
-                            ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
-                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-                        } catch (error) {
-                            console.error('保存配置失败:', error);
-                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-                        }
-                    } else if (访问路径 === 'admin/cf.json') { // 保存cf.json配置
-                        try {
-                            const newConfig = await request.json();
-                            const CF_JSON = { Email: null, GlobalAPIKey: null, AccountID: null, APIToken: null, UsageAPI: null };
-                            if (!newConfig.init || newConfig.init !== true) {
-                                if (newConfig.Email && newConfig.GlobalAPIKey) {
-                                    CF_JSON.Email = newConfig.Email;
-                                    CF_JSON.GlobalAPIKey = newConfig.GlobalAPIKey;
-                                } else if (newConfig.AccountID && newConfig.APIToken) {
-                                    CF_JSON.AccountID = newConfig.AccountID;
-                                    CF_JSON.APIToken = newConfig.APIToken;
-                                } else if (newConfig.UsageAPI){
-                                    CF_JSON.UsageAPI = newConfig.UsageAPI;
-                                } else {
-                                    return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
-                                }
+                                // 保存到 KV
+                                await env.KV.put('config.json', JSON.stringify(newConfig, null, 2));
+                                ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
+                                return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                            } catch (error) {
+                                console.error('保存配置失败:', error);
+                                return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
                             }
+                        } else if (访问路径 === 'admin/cf.json') { // 保存cf.json配置
+                            try {
+                                const newConfig = await request.json();
+                                const CF_JSON = { Email: null, GlobalAPIKey: null, AccountID: null, APIToken: null, UsageAPI: null };
+                                if (!newConfig.init || newConfig.init !== true) {
+                                    if (newConfig.Email && newConfig.GlobalAPIKey) {
+                                        CF_JSON.Email = newConfig.Email;
+                                        CF_JSON.GlobalAPIKey = newConfig.GlobalAPIKey;
+                                    } else if (newConfig.AccountID && newConfig.APIToken) {
+                                        CF_JSON.AccountID = newConfig.AccountID;
+                                        CF_JSON.APIToken = newConfig.APIToken;
+                                    } else if (newConfig.UsageAPI) {
+                                        CF_JSON.UsageAPI = newConfig.UsageAPI;
+                                    } else {
+                                        return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                                    }
+                                }
 
                             // 保存到 KV
                             await env.KV.put('cf.json', JSON.stringify(CF_JSON, null, 2));
@@ -181,52 +181,52 @@ export default {
                     return new Response(JSON.stringify(request.cf, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
                 }
 
-                ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Admin_Login', config_JSON));
-                return fetch(Pages静态页面 + '/admin');
-            } else if (访问路径 === 'logout') {//清除cookie并跳转到登录页面
-                const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
-                响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
-                return 响应;
-            } else if (访问路径 === 'sub') {//处理订阅请求
-                const 订阅TOKEN = await MD5MD5(host + userID);
-                if (url.searchParams.get('token') === 订阅TOKEN) {
-                    config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
-                    ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Get_SUB', config_JSON));
-                    const ua = UA.toLowerCase();
-                    const expire = 4102329600;//2099-12-31 到期时间
-                    const now = Date.now();
-                    const today = new Date(now);
-                    today.setHours(0, 0, 0, 0);
-                    const UD = Math.floor(((now - today.getTime()) / 86400000) * 24 * 1099511627776 / 2);
-                    let pagesSum = UD, workersSum = UD, total = 24 * 1099511627776;
-                    if (config_JSON.CF.Usage.success) {
-                        pagesSum = config_JSON.CF.Usage.pages;
-                        workersSum = config_JSON.CF.Usage.workers;
-                        total = Number.isFinite(config_JSON.CF.Usage.max) ? (config_JSON.CF.Usage.max / 1000) * 1024 : 1024 * 100;
-                    }
-                    const responseHeaders = {
-                        "content-type": "text/plain; charset=utf-8",
-                        "Profile-Update-Interval": config_JSON.优选订阅生成.SUBUpdateTime,
-                        "Profile-web-page-url": url.protocol + '//' + url.host + '/admin',
-                        "Subscription-Userinfo": `upload=${pagesSum}; download=${workersSum}; total=${total}; expire=${expire}`,
-                        "Cache-Control": "no-store",
-                    };
-                    const isSubConverterRequest = url.searchParams.has('b64') || url.searchParams.has('base64') || request.headers.get('subconverter-request') || request.headers.get('subconverter-version') || ua.includes('subconverter') || ua.includes(('CF-Workers-SUB').toLowerCase());
-                    const 订阅类型 = isSubConverterRequest
-                        ? 'mixed'
-                        : url.searchParams.has('target')
-                            ? url.searchParams.get('target')
-                            : url.searchParams.has('clash') || ua.includes('clash') || ua.includes('meta') || ua.includes('mihomo')
-                                ? 'clash'
-                                : url.searchParams.has('sb') || url.searchParams.has('singbox') || ua.includes('singbox') || ua.includes('sing-box')
-                                    ? 'singbox'
-                                    : url.searchParams.has('surge') || ua.includes('surge')
-                                        ? 'surge&ver=4'
-                                        : url.searchParams.has('quanx') || ua.includes('quantumult')
-                                            ? 'quanx'
-                                            : url.searchParams.has('loon') || ua.includes('loon')
-                                                ? 'loon'
-                                                : 'mixed';
+                    ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Admin_Login', config_JSON));
+                    return fetch(Pages静态页面 + '/admin');
+                } else if (访问路径 === 'logout' || uuidRegex.test(访问路径)) {//清除cookie并跳转到登录页面
+                    const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
+                    响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
+                    return 响应;
+                } else if (访问路径 === 'sub') {//处理订阅请求
+                    const 订阅TOKEN = await MD5MD5(host + userID);
+                    if (url.searchParams.get('token') === 订阅TOKEN) {
+                        config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
+                        ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Get_SUB', config_JSON));
+                        const ua = UA.toLowerCase();
+                        const expire = 4102329600;//2099-12-31 到期时间
+                        const now = Date.now();
+                        const today = new Date(now);
+                        today.setHours(0, 0, 0, 0);
+                        const UD = Math.floor(((now - today.getTime()) / 86400000) * 24 * 1099511627776 / 2);
+                        let pagesSum = UD, workersSum = UD, total = 24 * 1099511627776;
+                        if (config_JSON.CF.Usage.success) {
+                            pagesSum = config_JSON.CF.Usage.pages;
+                            workersSum = config_JSON.CF.Usage.workers;
+                            total = Number.isFinite(config_JSON.CF.Usage.max) ? (config_JSON.CF.Usage.max / 1000) * 1024 : 1024 * 100;
+                        }
+                        const responseHeaders = {
+                            "content-type": "text/plain; charset=utf-8",
+                            "Profile-Update-Interval": config_JSON.优选订阅生成.SUBUpdateTime,
+                            "Profile-web-page-url": url.protocol + '//' + url.host + '/admin',
+                            "Subscription-Userinfo": `upload=${pagesSum}; download=${workersSum}; total=${total}; expire=${expire}`,
+                            "Cache-Control": "no-store",
+                        };
+                        const isSubConverterRequest = url.searchParams.has('b64') || url.searchParams.has('base64') || request.headers.get('subconverter-request') || request.headers.get('subconverter-version') || ua.includes('subconverter') || ua.includes(('CF-Workers-SUB').toLowerCase());
+                        const 订阅类型 = isSubConverterRequest
+                            ? 'mixed'
+                            : url.searchParams.has('target')
+                                ? url.searchParams.get('target')
+                                : url.searchParams.has('clash') || ua.includes('clash') || ua.includes('meta') || ua.includes('mihomo')
+                                    ? 'clash'
+                                    : url.searchParams.has('sb') || url.searchParams.has('singbox') || ua.includes('singbox') || ua.includes('sing-box')
+                                        ? 'singbox'
+                                        : url.searchParams.has('surge') || ua.includes('surge')
+                                            ? 'surge&ver=4'
+                                            : url.searchParams.has('quanx') || ua.includes('quantumult')
+                                                ? 'quanx'
+                                                : url.searchParams.has('loon') || ua.includes('loon')
+                                                    ? 'loon'
+                                                    : 'mixed';
 
                     if (!ua.includes('mozilla')) responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
                     const 协议类型 = (url.searchParams.has('surge') || ua.includes('surge')) ? 'tro' + 'jan' : config_JSON.协议类型;

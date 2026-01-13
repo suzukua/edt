@@ -10,7 +10,7 @@ export default {
         if (upgradeHeader === 'websocket'){
             const xxoo = env.xxoo;
             if (env.do) {
-                const stub = await getDo()
+                const stub = await getDo(env)
                 return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxoo}});
             } else {
                 await 返袋参数获取(request);
@@ -21,13 +21,14 @@ export default {
     }
 
     // async scheduled(event, env, ctx) {
-    //     ctx.waitUntil(getDo().doValidPxyIps());
+    //     ctx.waitUntil(getDo(env).doValidPxyIps());
     // }
 };
 
 
-function getDo(){
-    const name = `user-apac`;
+function getDo(env){
+    const doLocation = env.REGION || "apac";
+    const name = `user-${doLocation}`;
     const id = env.WsBigDo.idFromName(name);
     return env.WsBigDo.get(id, {locationHint: doLocation})
 }

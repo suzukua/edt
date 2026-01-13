@@ -1,5 +1,6 @@
-﻿import { DurableObject } from 'cloudflare:workers';
-import { connect } from "cloudflare:sockets";
+﻿import {DurableObject} from 'cloudflare:workers';
+import {connect} from "cloudflare:sockets";
+
 let 返袋IP = '';
 let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0, 启用返袋兜底 = true;
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
@@ -11,9 +12,11 @@ export default {
             if (xxoo) {// ws代理
                 await 返袋参数获取(request);
                 return await 处理WS请求(request, xxoo);
+                // return await getDo(env).fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": userID}});
             } else {
                 return Response.error("配置不正确")
             }
+
         }
         return Response.json(request.cf);
     }
@@ -26,6 +29,14 @@ export default {
     //     ctx.waitUntil(stub.doValidProxyIps());
     // }
 };
+
+
+function getDo(env){
+    const doLocation = env.REGION || "apac";
+    const name = `user-${doLocation}}`;
+    const id = env.WsBigDo.idFromName(name);
+    return env.WsBigDo.get(id, {locationHint: doLocation})
+}
 
 /* ------------------- Durable Object 本体 ------------------- */
 export class WsBigDo extends DurableObject {

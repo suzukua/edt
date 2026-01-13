@@ -199,10 +199,15 @@ export default {
                         today.setHours(0, 0, 0, 0);
                         const UD = Math.floor(((now - today.getTime()) / 86400000) * 24 * 1099511627776 / 2);
                         let pagesSum = UD, workersSum = UD, total = 24 * 1099511627776;
-                        if (config_JSON.CF.Usage.success) {
-                            pagesSum = config_JSON.CF.Usage.pages;
-                            workersSum = config_JSON.CF.Usage.workers;
-                            total = Number.isFinite(config_JSON.CF.Usage.max) ? (config_JSON.CF.Usage.max / 1000) * 1024 : 1024 * 100;
+                        // if (config_JSON.CF.Usage.success) {
+                        //     pagesSum = config_JSON.CF.Usage.pages;
+                        //     workersSum = config_JSON.CF.Usage.workers;
+                        //     total = Number.isFinite(config_JSON.CF.Usage.max) ? (config_JSON.CF.Usage.max / 1000) * 1024 : 1024 * 100;
+                        // }
+                        if (config_JSON.CF.DoUsage.success) {
+                            pagesSum = 0;
+                            workersSum = config_JSON.CF.DoUsage.total;
+                            total = Number.isFinite(config_JSON.CF.DoUsage.max) ? (config_JSON.CF.DoUsage.max / 1000) * 1024 : 1024 * 100;
                         }
                         const responseHeaders = {
                             "content-type": "text/plain; charset=utf-8",

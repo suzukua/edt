@@ -302,15 +302,6 @@ async function forwardataudp(udpChunk, webSocket, respHeader) {
     }
 }
 
-async function getUUID(env) {
-    const 管理员密码 = env.ADMIN || env.admin || env.PASSWORD || env.password || env.pswd || env.TOKEN || env.KEY || env.UUID || env.uuid;
-    const 加密秘钥 = env.KEY || '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改';
-    const userIDMD5 = await MD5MD5(管理员密码 + 加密秘钥);
-    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-    const envUUID = env.UUID || env.uuid;
-    const userID = (envUUID && uuidRegex.test(envUUID)) ? envUUID.toLowerCase() : [userIDMD5.slice(0, 8), userIDMD5.slice(8, 12), '4' + userIDMD5.slice(13, 16), '8' + userIDMD5.slice(17, 20), userIDMD5.slice(20)].join('-');
-    return userID;
-}
 
 function closeSocketQuietly(socket) {
     try {
@@ -391,27 +382,6 @@ function base64ToArray(b64Str) {
     }
 }
 
-async function MD5MD5(文本) {
-    const 编码器 = new TextEncoder();
-
-    const 第一次蛤喜 = await crypto.subtle.digest('MD5', 编码器.encode(文本));
-    const 第一次蛤喜数组 = Array.from(new Uint8Array(第一次蛤喜));
-    const 第一次十六进制 = 第一次蛤喜数组.map(字节 => 字节.toString(16).padStart(2, '0')).join('');
-
-    const 第二次蛤喜 = await crypto.subtle.digest('MD5', 编码器.encode(第一次十六进制.slice(7, 27)));
-    const 第二次蛤喜数组 = Array.from(new Uint8Array(第二次蛤喜));
-    const 第二次十六进制 = 第二次蛤喜数组.map(字节 => 字节.toString(16).padStart(2, '0')).join('');
-
-    return 第二次十六进制.toLowerCase();
-}
-
-async function 整理成数组(内容) {
-    var 替换后的内容 = 内容.replace(/[	"'\r\n]+/g, ',').replace(/,+/g, ',');
-    if (替换后的内容.charAt(0) == ',') 替换后的内容 = 替换后的内容.slice(1);
-    if (替换后的内容.charAt(替换后的内容.length - 1) == ',') 替换后的内容 = 替换后的内容.slice(0, 替换后的内容.length - 1);
-    const 地址数组 = 替换后的内容.split(',');
-    return 地址数组;
-}
 
 async function 返袋参数获取(request) {
     const url = new URL(request.url);

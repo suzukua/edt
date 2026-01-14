@@ -1,5 +1,5 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "tianyan-v1"
+name = "tianyan-v2"
 main = "src/vIndex.js"
 compatibility_date = "2025-11-17"
 
@@ -55,15 +55,15 @@ enabled = false
 # Bind a Durable Object. Durable objects are a scale-to-zero compute primitive based on the actor model.
 # Durable Objects can live for as long as needed. Use these when you need a long-running "server", such as in realtime apps.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#durable-objects
-#[[durable_objects.bindings]]
-#name = "WsBigDo"
-#class_name = "WsBigDo"
+[[durable_objects.bindings]]
+name = "WsBigDo"
+class_name = "WsBigDo"
 
 # Durable Object migrations.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#migrations
-#[[migrations]]
-#tag = "v1"
-#new_sqlite_classes  = ["WsBigDo"]
+[[migrations]]
+tag = "v1"
+new_sqlite_classes  = ["WsBigDo"]
 
 # Bind a Hyperdrive configuration. Use to accelerate access to your existing databases from Cloudflare Workers.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#hyperdrive

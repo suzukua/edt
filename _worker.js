@@ -240,7 +240,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                 } catch (err) {
                     console.log(`[返袋连接] 连接失败: ${返袋地址}:${返袋端口}, 错误: ${err.message}`);
                     try { remoteSock?.close?.(); } catch (e) { }
-                    缓存返袋数组索引.splice(返袋数组索引, 1)
+                    缓存返袋解析数组.splice(返袋数组索引, 1)
                     i--; // 调整索引以避免跳过下一项
                     continue;
                 }

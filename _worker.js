@@ -9,8 +9,8 @@ export default {
         const upgradeHeader = request.headers.get('Upgrade');
         if (upgradeHeader === 'websocket'){
             const xxoo = env.xxoo;
-            if (env.do) {
-                const stub = await getDo(env)
+            const stub = await getDo(env)
+            if (stub) {
                 return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxoo}});
             } else {
                 await 返袋参数获取(request);
@@ -27,6 +27,9 @@ export default {
 
 
 function getDo(env){
+    if (!env.WsBigDo) {
+        return null;
+    }
     const doLocation = env.REGION || "apac";
     const name = `user-${doLocation}`;
     const id = env.WsBigDo.idFromName(name);

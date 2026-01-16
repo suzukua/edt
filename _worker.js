@@ -348,19 +348,6 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, ho
     ).catch((err) => {
         closeSocketQuietly(webSocket);
     });
-    if (!hasData) {
-        if (缓存返袋解析数组 && 缓存返袋解析数组.length > 0) {
-            for (let i = 0; i < 缓存返袋解析数组.length; i++) {
-                const [ip, port] = 缓存返袋解析数组[i];
-                if (ip == host) {
-                    console.log(`[返袋] ${ip}:${port} - 不可用，移除该项`);
-                    // 如果不可用则移除该项
-                    缓存返袋解析数组.splice(i, 1);
-                    break;
-                }
-            }
-        }
-    }
     if (!hasData && retryFunc) {
         console.log(`[connectStreams] ${host}:${portNum} 远程连接无数据返回，执行重试逻辑`);
         await retryFunc();

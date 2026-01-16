@@ -448,6 +448,9 @@ function sha224(s) {
 }
 
 async function 解析地址端口(pryip, 目标域名 = 'dash.cloudflare.com', UUID = '00000000-0000-4000-8000-000000000000') {
+    if (!pryip) {
+        return null;
+    }
     if (!缓存返袋IP || !缓存返袋解析数组 || 缓存返袋IP !== pryip) {
         pryip = pryip.toLowerCase();
         async function DoH查询(域名, 记录类型) {

@@ -251,6 +251,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         }
 
         if (返袋兜底) {
+            console.log(`[返袋兜底] 连接到: ${address}:${port}`)
             remoteSock = connect({ hostname: address, port: port });
             const writer = remoteSock.writable.getWriter();
             try {

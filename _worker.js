@@ -278,7 +278,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
     }
 
     async function connecttoPry() {
-        console.log(`[返袋连接] 代理到: ${host}:${portNum}`);
+        console.log(`[返袋连接] 代理到: ${host}:${portNum}, 反代IP：${返袋IP}`);
         const 所有返袋数组 = await 解析地址端口(返袋IP, host, yourUUID);
         let newSocket = await connectPxy(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有返袋数组, 启用返袋兜底);
         remoteConnWrapper.socket = newSocket;

@@ -214,7 +214,7 @@ function 解析魏烈思请求(chunk, token) {
 async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
     console.log(`[TCP转发] 目标: ${host}:${portNum} | 返袋IP: ${返袋IP} | 返袋兜底: ${启用返袋兜底 ? '是' : '否'} | 返袋类型: pryip'}`);
 
-    async function connectDirect(address, port, data, 所有返袋数组 = null, 返袋兜底 = true) {
+    async function connectPxy(address, port, data, 所有返袋数组 = null, 返袋兜底 = true) {
         let remoteSock;
         if (所有返袋数组 && 所有返袋数组.length > 0) {
             for (let i = 0; i < 所有返袋数组.length; i++) {
@@ -266,10 +266,21 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         }
     }
 
+    async function connectDirect(address, port, data) {
+        let remoteSock = connect({ hostname: address, port: port });
+        const writer = remoteSock.writable.getWriter();
+        try {
+            await writer.write(data);
+        } finally {
+            writer.releaseLock(); // 无论成功失败，必须释放锁
+        }
+        return remoteSock;
+    }
+
     async function connecttoPry() {
         console.log(`[返袋连接] 代理到: ${host}:${portNum}`);
         const 所有返袋数组 = await 解析地址端口(返袋IP, host, yourUUID);
-        let newSocket = await connectDirect(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有返袋数组, 启用返袋兜底);
+        let newSocket = await connectPxy(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有返袋数组, 启用返袋兜底);
         remoteConnWrapper.socket = newSocket;
         newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
         connectStreams(newSocket, ws, respHeader, null, host, portNum);

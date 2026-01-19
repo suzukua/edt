@@ -909,11 +909,13 @@ function 随机替换通配符(h) {
 function 批量替换域名(内容, hosts, 每组数量 = 2) {
     const 打乱后数组 = [...hosts].sort(() => Math.random() - 0.5);
     let count = 0, currentRandomHost = null;
-    return 内容.replace(/example\.com/g, () => {
-        if (count % 每组数量 === 0) currentRandomHost = 随机替换通配符(打乱后数组[Math.floor(count / 每组数量) % 打乱后数组.length]);
+    return 内容.split(`\n`).map((line, index) => {
+        const [host, hash] = 打乱后数组[Math.floor(count / 每组数量) % 打乱后数组.length].split(`#`);
         count++;
-        return currentRandomHost;
-    });
+        let newLine = line.replace(/example\.com/g,  随机替换通配符(host));
+        newLine += hash ? encodeURIComponent(hash) : ``;
+        return newLine
+    }).join(`\n`)
 }
 
 async function getECH(host) {

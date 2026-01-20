@@ -919,7 +919,11 @@ function 批量替换域名(内容, hosts, 每组数量 = 2) {
             return 随机替换通配符(host)
         });
         if (replaced) {
-            newLine += hash ? encodeURIComponent(hash) : ``;
+            if (newLine.trim().startsWith('- {')) {
+                return line.replace(/(name:\s*[^,}]+)/, `$1 - ${hash}`)
+            } else {
+                newLine += hash ? encodeURIComponent(hash) : ``;
+            }
         }
         return newLine
     }).join(`\n`)

@@ -920,7 +920,7 @@ function 批量替换域名(内容, hosts, 每组数量 = 2) {
         });
         if (replaced) {
             if (newLine.trim().startsWith('- {')) {
-                newLine = newLine.replace(/(name:\s*[^,}]+)/, `$1 - ${hash}`)
+                newLine = newLine.replace(/(name:\s*[^,}]+)/, `$1-${hash}`)
             } else {
                 newLine += hash ? encodeURIComponent(hash) : ``;
             }

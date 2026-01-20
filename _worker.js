@@ -911,9 +911,15 @@ function 批量替换域名(内容, hosts, 每组数量 = 2) {
     let count = 0, currentRandomHost = null;
     return 内容.split(`\n`).map((line, index) => {
         const [host, hash] = 打乱后数组[Math.floor(count / 每组数量) % 打乱后数组.length].split(`#`);
-        count++;
-        let newLine = line.replace(/example\.com/g,  随机替换通配符(host));
-        newLine += hash ? encodeURIComponent(hash) : ``;
+        let replaced = false;
+        let newLine = line.replace(/example\.com/g,  (match) => {
+            replaced = true;
+            count++;
+            return 随机替换通配符(host)
+        });
+        if (replaced) {
+            newLine += hash ? encodeURIComponent(hash) : ``;
+        }
         return newLine
     }).join(`\n`)
 }

@@ -27,7 +27,7 @@ export default {
         if (env.GO2SOCKS5) SOCKS5白名单 = await 整理成数组(env.GO2SOCKS5);
         ECH_DOH = env.ECH_DOH || env.DOH || ECH_DOH;
         if (!upgradeHeader || upgradeHeader !== 'websocket') {
-            if (url.protocol === 'http:') return Response.redirect(url.href.replace(`http://${url.hostname}`, `https://${url.hostname}`), 301);
+            if (url.protocol === 'http:' && url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') return Response.redirect(url.href.replace(`http://${url.hostname}`, `https://${url.hostname}`), 301);
             if (!管理员密码) return fetch(Pages静态页面 + '/noADMIN').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
             if (env.KV && typeof env.KV.get === 'function') {
                 const 访问路径 = url.pathname.slice(1).toLowerCase();
@@ -299,7 +299,6 @@ export default {
                                 //   - IPv6: [2606:4700::]:443#CMCC 或 [2606:4700::]
                                 const regex = /^(\[[\da-fA-F:]+\]|[\d.]+|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*)(?::(\d+))?(?:#(.+))?$/;
                                 const match = 原始地址.match(regex);
-
                                 let 节点地址, 节点端口 = "443", 节点备注;
 
                                 if (match) {
@@ -909,9 +908,9 @@ function 随机替换通配符(h) {
 
 function 批量替换域名(内容, hosts, 每组数量 = 2) {
     const 打乱后数组 = [...hosts].sort(() => Math.random() - 0.5);
-    let count = 0, currentRandomHost = null;
+    let count = 0;
     return 内容.split(`\n`).map((line, index) => {
-        const [host, hash] = 打乱后数组[Math.floor(count / 每组数量) % 打乱后数组.length].split(`#`);
+        const [host, hostHash] = 打乱后数组[Math.floor(count / 每组数量) % 打乱后数组.length].split(`#`);
         let replaced = false;
         let newLine = line.replace(/example\.com/g,  (match) => {
             replaced = true;
@@ -920,9 +919,9 @@ function 批量替换域名(内容, hosts, 每组数量 = 2) {
         });
         if (replaced) {
             if (newLine.trim().startsWith('- {')) {
-                newLine = newLine.replace(/(name:\s*[^,}]+)/, `$1-${hash}`)
+                newLine = newLine.replace(/(name:\s*[^,}]+)/, `$1-${hostHash}`)
             } else {
-                newLine += hash ? encodeURIComponent(hash) : ``;
+                newLine += hostHash ? encodeURIComponent(hostHash) : ``;
             }
         }
         return newLine
@@ -1162,7 +1161,8 @@ async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) 
     if (!urls?.length) return [[], [], []];
     const results = new Set();
     let 订阅链接响应的明文LINK内容 = '', 需要订阅转换订阅URLs = [];
-    await Promise.allSettled(urls.map(async (url) => {
+    await Promise.allSettled(urls.map(async (urlstr) => {
+        let [url, urlRemark] = urlstr.split('#');
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 超时时间);
@@ -1243,7 +1243,7 @@ async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) 
                         hasPort = colonIndex > -1 && /^\d+$/.test(hostPart.substring(colonIndex + 1));
                     }
                     const port = new URL(url).searchParams.get('port') || 默认端口;
-                    results.add(hasPort ? line : `${hostPart}:${port}${remark}`);
+                    results.add(hasPort ? line : `${hostPart}:${port}${urlRemark ? '#' + urlRemark : remark}`);
                 });
             } else {
                 const headers = lines[0].split(',').map(h => h.trim());
@@ -1257,7 +1257,7 @@ async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) 
                         const cols = line.split(',').map(c => c.trim());
                         if (tlsIdx !== -1 && cols[tlsIdx]?.toLowerCase() !== 'true') return;
                         const wrappedIP = IPV6_PATTERN.test(cols[ipIdx]) ? `[${cols[ipIdx]}]` : cols[ipIdx];
-                        results.add(`${wrappedIP}:${cols[portIdx]}#${cols[remarkIdx]}`);
+                        results.add(`${wrappedIP}:${cols[portIdx]}#${urlRemark ? urlRemark : cols[remarkIdx]}`);
                     });
                 } else if (headers.some(h => h.includes('IP')) && headers.some(h => h.includes('延迟')) && headers.some(h => h.includes('下载速度'))) {
                     const ipIdx = headers.findIndex(h => h.includes('IP'));
@@ -1267,7 +1267,7 @@ async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) 
                     dataLines.forEach(line => {
                         const cols = line.split(',').map(c => c.trim());
                         const wrappedIP = IPV6_PATTERN.test(cols[ipIdx]) ? `[${cols[ipIdx]}]` : cols[ipIdx];
-                        results.add(`${wrappedIP}:${port}#CF优选 ${cols[delayIdx]}ms ${cols[speedIdx]}MB/s`);
+                        results.add(`${wrappedIP}:${port}#${urlRemark ? urlRemark : 'CF优选'}|${cols[delayIdx]}ms|${cols[speedIdx]}MB/s`);
                     });
                 }
             }

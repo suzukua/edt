@@ -8,7 +8,10 @@ export default {
     async fetch(request, env, ctx) {
         const upgradeHeader = request.headers.get('Upgrade');
         if (upgradeHeader === 'websocket'){
-            const xxoo = env.xxoo;
+            let xxoo = '';
+            if (env.xxoo && env.xxoo.get) {
+                xxoo = await env.xxoo.get()
+            }
             const stub = await getDo(env)
             if (stub) {
                 return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxoo}});
@@ -17,7 +20,7 @@ export default {
                 return await 处理WS请求(request, xxoo);
             }
         }
-        return Response.json(request.cf);
+        return new Response(JSON.stringify(request.cf, null, 2), {headers: {"Content-Type": "application/json; charset=utf-8"}});
     }
 
     // async scheduled(event, env, ctx) {

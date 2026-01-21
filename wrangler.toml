@@ -1,7 +1,10 @@
 #:schema node_modules/wrangler/config-schema.json
 name = "tianyan-v2"
 main = "src/vIndex.js"
-compatibility_date = "2025-11-17"
+compatibility_date = "2026-01-21"
+secrets_store_secrets = [
+    { binding = "xxoo", store_id= "6df4b8ca560d45a7adcdc8fe96c56658", secret_name = "xxoo" }
+]
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
@@ -23,6 +26,7 @@ enabled = false
 # - https://developers.cloudflare.com/workers/configuration/secrets/
 # [vars]
 # MY_VARIABLE = "production_value"
+
 
 # Bind the Workers AI model catalog. Run machine learning models, powered by serverless GPUs, on Cloudflare’s global network
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#workers-ai

@@ -445,6 +445,7 @@ async function httpConnect(targetHost, targetPort, initialData) {
 }
 //////////////////////////////////////////////////功能性函数///////////////////////////////////////////////
 function Clash订阅配置文件热补丁(Clash_原始订阅内容, uuid = null, ECH启用 = false, HOSTS = [], ECH_SNI = null, ECH_DNS) {
+    HOSTS = HOSTS.map(h => h.split("#")[0]);// 去掉备注
     let clash_yaml = Clash_原始订阅内容.replace(/mode:\s*Rule\b/g, 'mode: rule');
 
     // 基础 DNS 配置块（不含 nameserver-policy）

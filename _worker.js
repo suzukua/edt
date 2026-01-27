@@ -186,7 +186,7 @@ function 解析魏烈思请求(chunk, token) {
     const optLen = new Uint8Array(chunk.slice(17, 18))[0];
     const cmd = new Uint8Array(chunk.slice(18 + optLen, 19 + optLen))[0];
     let isUDP = false;
-    if (cmd === 1) { } else if (cmd === 2) { isUDP = true; } else { return { hasError: true, message: 'Invalid command' }; }
+    if (cmd === 1) { } else if (cmd === 2) { isUDP = true; } else { return { hasError: true, message: `command ${cmd} is not supported, command 01-tcp,02-udp,03-mux` }; }
     const portIdx = 19 + optLen;
     const port = new DataView(chunk.slice(portIdx, portIdx + 2)).getUint16(0);
     let addrIdx = portIdx + 2, addrLen = 0, addrValIdx = addrIdx + 1, hostname = '';
@@ -413,19 +413,19 @@ async function 返袋参数获取(request) {
     const url = new URL(request.url);
     const { pathname, searchParams } = url;
     const pathLower = pathname.toLowerCase();
-
-    // 统一处理返袋IP参数 (优先级最高,使用正则一次匹配)
-    const proxyMatch = pathLower.match(/\/(proxyip[.=]|pyip=|ip=)(.+)/);
+    // 优先使用参数里面的proxyip
     if (searchParams.has('proxyip')) {
         const 路参IP = searchParams.get('proxyip');
         返袋IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
-        // 启用返袋兜底 = false;
         return;
-    } else if (proxyMatch) {
-        const 路参IP = proxyMatch[1] === 'proxyip.' ? `proxyip.${proxyMatch[2]}` : proxyMatch[2];
-        返袋IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
-        // 启用返袋兜底 = false;
-        return;
+    } else {
+        // 统一处理返袋IP参数 (优先级最高,使用正则一次匹配)
+        const proxyMatch = pathLower.match(/\/(proxyip[.=]|pyip=|ip=)(.+)/);
+        if (proxyMatch) {
+            const 路参IP = proxyMatch[1] === 'proxyip.' ? `proxyip.${proxyMatch[2]}` : proxyMatch[2];
+            返袋IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
+            return;
+        }
     }
 }
 

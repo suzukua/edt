@@ -2,7 +2,7 @@
 import {connect} from "cloudflare:sockets";
 
 let 返袋IP = '';
-let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0, 启用返袋兜底 = true;
+let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0;
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
 export default {
     async fetch(request, env, ctx) {
@@ -22,10 +22,6 @@ export default {
         }
         return new Response(JSON.stringify(request.cf, null, 2), {headers: {"Content-Type": "application/json; charset=utf-8"}});
     }
-
-    // async scheduled(event, env, ctx) {
-    //     ctx.waitUntil(getDo(env).doValidPxyIps());
-    // }
 };
 
 
@@ -60,10 +56,6 @@ export class WsBigDo extends DurableObject {
         await 返袋参数获取(request);
         return await 处理WS请求(request, userId);
     }
-
-    async doValidPxyIps() {
-        return await validPxyIps();
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
@@ -75,7 +67,6 @@ async function 处理WS请求(request, yourUUID) {
     let isDnsQuery = false;
     const earlyData = request.headers.get('sec-websocket-protocol') || '';
     const readable = makeReadableStr(serverSock, earlyData);
-    let 判断是否是木马 = null;
     readable.pipeTo(new WritableStream({
         async write(chunk) {
             if (isDnsQuery) return await forwardataudp(chunk, serverSock, null);
@@ -85,98 +76,21 @@ async function 处理WS请求(request, yourUUID) {
                 writer.releaseLock();
                 return;
             }
-
-            if (判断是否是木马 === null) {
-                const bytes = new Uint8Array(chunk);
-                判断是否是木马 = bytes.byteLength >= 58 && bytes[56] === 0x0d && bytes[57] === 0x0a;
+            const { port, hostname, rawIndex, version, isUDP } = 解析魏烈思请求(chunk, yourUUID);
+            if (isUDP) {
+                if (port === 53) isDnsQuery = true;
+                else throw new Error('UDP is not supported');
             }
-
-            if (remoteConnWrapper.socket) {
-                const writer = remoteConnWrapper.socket.writable.getWriter();
-                await writer.write(chunk);
-                writer.releaseLock();
-                return;
-            }
-
-            if (判断是否是木马) {
-                const { port, hostname, rawClientData } = 解析木马请求(chunk, yourUUID);
-                await forwardataTCP(hostname, port, rawClientData, serverSock, null, remoteConnWrapper, yourUUID);
-            } else {
-                const { port, hostname, rawIndex, version, isUDP } = 解析魏烈思请求(chunk, yourUUID);
-                if (isUDP) {
-                    if (port === 53) isDnsQuery = true;
-                    else throw new Error('UDP is not supported');
-                }
-                const respHeader = new Uint8Array([version[0], 0]);
-                const rawData = chunk.slice(rawIndex);
-                if (isDnsQuery) return forwardataudp(rawData, serverSock, respHeader);
-                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID);
-            }
+            const respHeader = new Uint8Array([version[0], 0]);
+            const rawData = chunk.slice(rawIndex);
+            if (isDnsQuery) return forwardataudp(rawData, serverSock, respHeader);
+            await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID);
         },
     })).catch((err) => {
         // console.error('Readable pipe error:', err);
     });
 
     return new Response(null, { status: 101, webSocket: clientSock });
-}
-
-function 解析木马请求(buffer, passwordPlainText) {
-    const sha224Password = sha224(passwordPlainText);
-    if (buffer.byteLength < 56) return { hasError: true, message: "invalid data" };
-    let crLfIndex = 56;
-    if (new Uint8Array(buffer.slice(56, 57))[0] !== 0x0d || new Uint8Array(buffer.slice(57, 58))[0] !== 0x0a) return { hasError: true, message: "invalid header format" };
-    const password = new TextDecoder().decode(buffer.slice(0, crLfIndex));
-    if (password !== sha224Password) return { hasError: true, message: "invalid password" };
-
-    const socks5DataBuffer = buffer.slice(crLfIndex + 2);
-    if (socks5DataBuffer.byteLength < 6) return { hasError: true, message: "invalid S5 request data" };
-
-    const view = new DataView(socks5DataBuffer);
-    const cmd = view.getUint8(0);
-    if (cmd !== 1) return { hasError: true, message: "unsupported command, only TCP is allowed" };
-
-    const atype = view.getUint8(1);
-    let addressLength = 0;
-    let addressIndex = 2;
-    let address = "";
-    switch (atype) {
-        case 1: // IPv4
-            addressLength = 4;
-            address = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength)).join(".");
-            break;
-        case 3: // Domain
-            addressLength = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + 1))[0];
-            addressIndex += 1;
-            address = new TextDecoder().decode(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
-            break;
-        case 4: // IPv6
-            addressLength = 16;
-            const dataView = new DataView(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
-            const ipv6 = [];
-            for (let i = 0; i < 8; i++) {
-                ipv6.push(dataView.getUint16(i * 2).toString(16));
-            }
-            address = ipv6.join(":");
-            break;
-        default:
-            return { hasError: true, message: `invalid addressType is ${atype}` };
-    }
-
-    if (!address) {
-        return { hasError: true, message: `address is empty, addressType is ${atype}` };
-    }
-
-    const portIndex = addressIndex + addressLength;
-    const portBuffer = socks5DataBuffer.slice(portIndex, portIndex + 2);
-    const portRemote = new DataView(portBuffer).getUint16(0);
-
-    return {
-        hasError: false,
-        addressType: atype,
-        port: portRemote,
-        hostname: address,
-        rawClientData: socks5DataBuffer.slice(portIndex + 4)
-    };
 }
 
 function 解析魏烈思请求(chunk, token) {
@@ -215,7 +129,7 @@ function 解析魏烈思请求(chunk, token) {
     return { hasError: false, addressType, port, hostname, isUDP, rawIndex: addrValIdx + addrLen, version };
 }
 async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
-    console.log(`[TCP转发] 目标: ${host}:${portNum} | 返袋IP: ${返袋IP} | 返袋兜底: ${启用返袋兜底 ? '是' : '否'} | 返袋类型: pryip'}`);
+    console.log(`[TCP转发] 目标: ${host}:${portNum} | 返袋IP: ${返袋IP} | 返袋类型: pryip'}`);
 
     async function connectPxy(address, port, data, 所有返袋数组 = null, 返袋兜底 = true) {
         let remoteSock;
@@ -283,7 +197,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
     async function connecttoPry() {
         console.log(`[返袋连接] 代理到: ${host}:${portNum}, 反代IP：${返袋IP}`);
         const 所有返袋数组 = await 解析地址端口(返袋IP, host, yourUUID);
-        let newSocket = await connectPxy(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有返袋数组, 启用返袋兜底);
+        let newSocket = await connectPxy(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有返袋数组, true);
         remoteConnWrapper.socket = newSocket;
         newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
         connectStreams(newSocket, ws, respHeader, null, host, portNum);
@@ -551,28 +465,4 @@ async function 解析地址端口(pryip, 目标域名 = 'dash.cloudflare.com', U
         缓存返袋IP = pryip;
     } else console.log(`[返袋解析] 读取缓存 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
     return 缓存返袋解析数组;
-}
-
-async function validPxyIps() {
-    // 耗时任务
-    console.log(`返袋验证任务开始, ${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
-    if (缓存返袋解析数组 && 缓存返袋解析数组.length > 0) {
-        for (let i = 0; i < 缓存返袋解析数组.length; i++) {
-            const [ip, port] = 缓存返袋解析数组[i];
-            const testApi = `${atob("aHR0cHM6Ly9jaGVjay5wcm94eWlwLmNtbGl1c3Nzcy5uZXQvY2hlY2s")}?proxyip=${ip}:${port}`
-            const response = await fetch(testApi);
-            if (response.ok) {
-                const result = await response.json();
-                console.log(`[返袋验证] ${ip}:${port} - 地区：${result.loc}--${result.city}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
-                if (result.success) {
-                    continue;
-                }
-            }
-            console.log(`[返袋验证] ${ip}:${port} - 不可用，移除该项`);
-            // 如果不可用则移除该项
-            缓存返袋解析数组.splice(i, 1);
-            i--; // 调整索引以避免跳过下一项
-        }
-    }
-    console.log(`返袋验证任务结束, ${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
 }

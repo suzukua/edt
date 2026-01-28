@@ -139,6 +139,10 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                 const [返袋地址, 返袋端口] = 所有返袋数组[返袋数组索引];
                 try {
                     console.log(`[返袋连接] 尝试连接到: ${返袋地址}:${返袋端口} (索引: ${返袋数组索引})`);
+                    const pxyOk = await validPxyIp(返袋地址, 返袋端口);
+                    if (!pxyOk) {
+                        throw new Error('validPxyIp检查到返袋IP不可用');
+                    }
                     remoteSock = connect({ hostname: 返袋地址, port: 返袋端口 });
                     // 等待TCP连接真正建立，设置1秒超时
                     await Promise.race([
@@ -455,14 +459,28 @@ async function 解析地址端口(pryip, 目标域名 = 'dash.cloudflare.com', U
                 所有返袋数组 = [[地址, 端口]];
             }
         }
-        const 排序后数组 = 所有返袋数组.sort((a, b) => a[0].localeCompare(b[0]));
-        const 目标根域名 = 目标域名.includes('.') ? 目标域名.split('.').slice(-2).join('.') : 目标域名;
-        let 随机种子 = [...(目标根域名 + UUID)].reduce((a, c) => a + c.charCodeAt(0), 0);
-        console.log(`[返袋解析] 随机种子: ${随机种子}\n目标站点: ${目标根域名}`)
-        const 洗牌后 = [...排序后数组].sort(() => (随机种子 = (随机种子 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
-        缓存返袋解析数组 = 洗牌后.slice(0, 100);
+        缓存返袋解析数组 = 所有返袋数组;
+        // const 排序后数组 = 所有返袋数组.sort((a, b) => a[0].localeCompare(b[0]));
+        // const 目标根域名 = 目标域名.includes('.') ? 目标域名.split('.').slice(-2).join('.') : 目标域名;
+        // let 随机种子 = [...(目标根域名 + UUID)].reduce((a, c) => a + c.charCodeAt(0), 0);
+        // console.log(`[返袋解析] 随机种子: ${随机种子}\n目标站点: ${目标根域名}`)
+        // const 洗牌后 = [...排序后数组].sort(() => (随机种子 = (随机种子 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
+        // 缓存返袋解析数组 = 洗牌后.slice(0, 100);
         console.log(`[返袋解析] 解析完成 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
         缓存返袋IP = pryip;
     } else console.log(`[返袋解析] 读取缓存 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
     return 缓存返袋解析数组;
+}
+
+async function validPxyIp(pxyip, port) {
+    console.log(`[返袋IP验证] ${pxyip}${port ? ":" + port : ""}`);
+    const testApi = `${atob("aHR0cHM6Ly9jaGVjay5wcm94eWlwLmNtbGl1c3Nzcy5uZXQvY2hlY2s")}?proxyip=${pxyip}${port ? ":" + port : ""}`
+    const response = await fetch(testApi);
+    if (response.ok) {
+        const result = await response.json();
+        console.log(`[返袋IP验证结果] ${result.proxyIP}:${result.portRemote} - 地区：${result.loc}--${result.city}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
+        return result.success;
+    }
+    console.log(`[返袋IP验证结果] ${pxyip}${port ? ":" + port : ""} - 不可用！`);
+    return false;
 }

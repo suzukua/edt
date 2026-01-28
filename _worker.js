@@ -137,7 +137,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
             for (let i = 缓存返袋数组索引; i < 所有返袋数组.length; i++) {
                 const [返袋地址, 返袋端口] = 所有返袋数组[i];
                 try {
-                    console.log(`[返袋连接] 尝试连接到: ${返袋地址}:${返袋端口} (索引: ${返袋数组索引})`);
+                    console.log(`[返袋连接] 尝试连接到: ${返袋地址}:${返袋端口} (索引: ${i})`);
                     await validPxyIp(返袋地址, 返袋端口);
                     remoteSock = connect({ hostname: 返袋地址, port: 返袋端口 });
                     // 等待TCP连接真正建立，设置1秒超时

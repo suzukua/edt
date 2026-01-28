@@ -480,6 +480,9 @@ async function validPxyIp(pxyip, port) {
         const result = await response.json();
         console.log(`[返袋IP验证结果] ${result.proxyIP}:${result.portRemote} - 地区：${result.loc}--${result.city}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
         return result.success;
+    } else {
+        console.log(`[返袋IP验证结果] 请求失败，状态码: ${response.status}`);
+        await response.body.cancel();
     }
     console.log(`[返袋IP验证结果] ${pxyip}${port ? ":" + port : ""} - 不可用！`);
     return false;

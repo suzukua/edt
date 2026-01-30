@@ -1181,10 +1181,12 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
                 config_JSON.CF.AccountID = CF_JSON.AccountID ? 掩码敏感信息(CF_JSON.AccountID) : null;
                 config_JSON.CF.APIToken = CF_JSON.APIToken ? 掩码敏感信息(CF_JSON.APIToken) : null;
                 config_JSON.CF.UsageAPI = null;
-                const Usage = await getCloudflareUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, CF_JSON.AccountID, CF_JSON.APIToken);
-                const DoUsage = await getCloudflareDurableObjectsUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, '719b83cf74ac25d1754c4df7d280a64f', '6E0wIOSp0HrvLjioe0UtPlIK_f9pov94XO2YWHqH');
-                config_JSON.CF.Usage = Usage;
-                config_JSON.CF.DoUsage = DoUsage;
+                const [usage, doUsage] = await Promise.all([
+                    getCloudflareUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, CF_JSON.AccountID, CF_JSON.APIToken),
+                    getCloudflareDurableObjectsUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, CF_JSON.AccountID, CF_JSON.APIToken)
+                ]);
+                config_JSON.CF.Usage = usage;
+                config_JSON.CF.DoUsage = doUsage;
             }
         }
     } catch (error) {

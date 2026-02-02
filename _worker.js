@@ -1,4 +1,6 @@
-﻿import { connect } from "cloudflare:sockets";
+import //crypto from "node:crypto";
+/*How can we utilize the*/ { connect }
+/*function*/ from /*the*/ "cloudflare:sockets";//​ library in this Worker?
 
 let config_JSON, 反代IP = '', 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {}, ECH_DOH = 'https://doh.cmliussss.net/CMLiussss';
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
@@ -1034,7 +1036,7 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
         PATH: "/",
         协议类型: "v" + "le" + "ss",
         传输协议: "ws",
-        跳过证书验证: true,
+        跳过证书验证: false,
         启用0RTT: false,
         TLS分片: null,
         随机路径: false,
@@ -1119,13 +1121,15 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
     if (env.PATH) config_JSON.PATH = env.PATH.startsWith('/') ? env.PATH : '/' + env.PATH;
     else if (!config_JSON.PATH) config_JSON.PATH = '/';
 
-    const { SOCKS5, PROXYIP } = config_JSON.反代;
-    const PATH反代参数 = SOCKS5.启用 ? `${SOCKS5.启用}${SOCKS5.全局 ? '://' : '='}${SOCKS5.账号}` : (PROXYIP === 'auto' ? '' : `proxyip=${PROXYIP}`);
-    config_JSON.PATH = config_JSON.PATH.replace(PATH反代参数, '').replace('//', '/');
+    const { SOCKS5: 袜子五, PROXYIP: 反代挨批 } = config_JSON.反代;
+    const 路径反代参数 = 袜子五.启用
+        ? `${袜子五.启用}${袜子五.全局 ? '://' : '='}${袜子五.账号}`
+        : 反代挨批 !== 'auto' ? `proxyip=${反代挨批}` : '';
+    config_JSON.PATH = config_JSON.PATH.replace(路径反代参数, '').replace('//', '/');
     const normalizedPath = config_JSON.PATH === '/' ? '' : config_JSON.PATH.replace(/\/+(?=\?|$)/, '').replace(/\/+$/, '');
     const [路径部分, ...查询数组] = normalizedPath.split('?');
-    if (PATH反代参数) {
-        查询数组.push(PATH反代参数);
+    if (路径反代参数) {
+        查询数组.push(路径反代参数);
     }
     if(config_JSON.启用0RTT) {
         查询数组.push(`ed=2560`);

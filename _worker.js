@@ -981,11 +981,15 @@ function 批量替换域名(内容, hosts, 每组数量 = 2) {
             count++;
             return 随机替换通配符(host)
         });
-        if (replaced) {
+        if (replaced) {//clash替换备注
             if (newLine.trim().startsWith('- {')) {
-                newLine = newLine.replace(/(name:\s*[^,}]+)/, `$1-${hostHash}`)
+                newLine = newLine.replace(/(name:\s*[^,}]+)/, `$1|${hostHash}`)
+            } else if (/(.*?)\s*=\s*VLESS/.test(newLine)) {//loon
+                newLine = newLine.replace(/(.*?)\s*=\s*VLESS/, `$1|${hostHash} = VLESS`);
+            } else if (newLine.startsWith('vless = ') && /(,\s*tag=.*$)/.test(newLine)) {//quanx
+                newLine = newLine.replace(/(,\s*tag=.*$)/, `, tag=$1|${hostHash}`);
             } else {
-                newLine += hostHash ? encodeURIComponent(hostHash) : ``;
+                newLine += hostHash ? encodeURIComponent(`|${hostHash}`) : ``;
             }
         }
         return newLine

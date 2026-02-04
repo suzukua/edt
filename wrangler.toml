@@ -1,6 +1,6 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "web-sub-manager"
-main = "src/vIndex.js"
+name = "pags-sub-manager"
+pages_build_output_dir = "dist/"
 compatibility_date = "2025-11-04"
 
 # Workers Logs

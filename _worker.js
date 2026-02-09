@@ -1156,10 +1156,15 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
     config_JSON.PATH = config_JSON.PATH.replace(路径反代参数, '').replace('//', '/');
     const normalizedPath = config_JSON.PATH === '/' ? '' : config_JSON.PATH.replace(/\/+(?=\?|$)/, '').replace(/\/+$/, '');
     const [路径部分, ...查询数组] = normalizedPath.split('?');
-    const 查询部分 = 查询数组.length ? '?' + 查询数组.join('?') : '';
-    const 最终查询部分 = 反代查询参数 ? (查询部分 ? 查询部分 + '&' + 反代查询参数 : '?' + 反代查询参数) : 查询部分;
-    config_JSON.完整节点路径 = (路径部分 || '/') + (路径部分 && 路径反代参数 ? '/' : '') + 路径反代参数 + 最终查询部分 + (config_JSON.启用0RTT ? (最终查询部分 ? '&' : '?') + 'ed=2560' : '');
-
+    if (路径反代参数) {
+        查询数组.push(路径反代参数);
+    }
+    if(config_JSON.启用0RTT) {
+        查询数组.push(`ed=2560`);
+    }
+    const 查询部分 = 查询数组.length ? '?' + 查询数组.join('&') : '';
+// config_JSON.完整节点路径 = (路径部分 || '/') + (路径部分 && PATH反代参数 ? '/' : '') + PATH反代参数 + 查询部分 + (config_JSON.启用0RTT ? (查询部分 ? '&' : '?') + 'ed=2560' : '');
+    config_JSON.完整节点路径 = (路径部分 == null ? '/' : 路径部分) + 查询部分;
     if (!config_JSON.TLS分片 && config_JSON.TLS分片 !== null) config_JSON.TLS分片 = null;
     const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
     if (!config_JSON.Fingerprint) config_JSON.Fingerprint = "chrome";

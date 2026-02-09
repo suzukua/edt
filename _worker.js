@@ -1075,6 +1075,11 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
                 账号: 我的SOCKS5账号,
                 白名单: SOCKS5白名单,
             },
+            路径模板: {
+                PROXYIP: "proxyip={{IP:PORT}}",
+                SOCKS5: { 全局: "socks5://{{IP:PORT}}", 标准: "socks5={{IP:PORT}}" },
+                HTTP: { 全局: "http://{{IP:PORT}}", 标准: "http={{IP:PORT}}" },
+            },
         },
         TG: {
             启用: false,
@@ -1125,23 +1130,35 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
     if (env.PATH) config_JSON.PATH = env.PATH.startsWith('/') ? env.PATH : '/' + env.PATH;
     else if (!config_JSON.PATH) config_JSON.PATH = '/';
 
-    const { SOCKS5: 袜子五, PROXYIP: 反代挨批 } = config_JSON.反代;
-    const 路径反代参数 = 袜子五.启用
-        ? `${袜子五.启用}${袜子五.全局 ? '://' : '='}${袜子五.账号}`
-        : 反代挨批 !== 'auto' ? `proxyip=${反代挨批}` : '';
+    if (!config_JSON.反代.路径模板?.PROXYIP) {
+        config_JSON.反代.路径模板 = {
+            PROXYIP: "proxyip={{IP:PORT}}",
+            SOCKS5: { 全局: "socks5://{{IP:PORT}}", 标准: "socks5={{IP:PORT}}" },
+            HTTP: { 全局: "http://{{IP:PORT}}", 标准: "http={{IP:PORT}}" },
+        };
+    }
+
+    const { SOCKS5: 袜子五, PROXYIP: 反代挨批, 路径模板 } = config_JSON.反代;
+    const 代理配置 = 路径模板[袜子五.启用?.toUpperCase()];
+    const 占位符 = '{{IP:PORT}}';
+
+    let 路径反代参数 = '';
+    if (代理配置 && 袜子五.账号) 路径反代参数 = (袜子五.全局 ? 代理配置.全局 : 代理配置.标准).replace(占位符, 袜子五.账号);
+    else if (反代挨批 !== 'auto') 路径反代参数 = 路径模板.PROXYIP.replace(占位符, 反代挨批);
+
+    let 反代查询参数 = '';
+    if (路径反代参数.includes('?')) {
+        const [反代路径部分, 反代查询部分] = 路径反代参数.split('?');
+        路径反代参数 = 反代路径部分;
+        反代查询参数 = 反代查询部分;
+    }
+
     config_JSON.PATH = config_JSON.PATH.replace(路径反代参数, '').replace('//', '/');
     const normalizedPath = config_JSON.PATH === '/' ? '' : config_JSON.PATH.replace(/\/+(?=\?|$)/, '').replace(/\/+$/, '');
     const [路径部分, ...查询数组] = normalizedPath.split('?');
-    if (路径反代参数) {
-        查询数组.push(路径反代参数);
-    }
-    if(config_JSON.启用0RTT) {
-        查询数组.push(`ed=2560`);
-    }
-    const 查询部分 = 查询数组.length ? '?' + 查询数组.join('&') : '';
-
-    // config_JSON.完整节点路径 = (路径部分 || '/') + (路径部分 && PATH反代参数 ? '/' : '') + PATH反代参数 + 查询部分 + (config_JSON.启用0RTT ? (查询部分 ? '&' : '?') + 'ed=2560' : '');
-    config_JSON.完整节点路径 = (路径部分 == null ? '/' : 路径部分) + 查询部分;
+    const 查询部分 = 查询数组.length ? '?' + 查询数组.join('?') : '';
+    const 最终查询部分 = 反代查询参数 ? (查询部分 ? 查询部分 + '&' + 反代查询参数 : '?' + 反代查询参数) : 查询部分;
+    config_JSON.完整节点路径 = (路径部分 || '/') + (路径部分 && 路径反代参数 ? '/' : '') + 路径反代参数 + 最终查询部分 + (config_JSON.启用0RTT ? (最终查询部分 ? '&' : '?') + 'ed=2560' : '');
 
     if (!config_JSON.TLS分片 && config_JSON.TLS分片 !== null) config_JSON.TLS分片 = null;
     const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';

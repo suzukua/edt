@@ -20,7 +20,15 @@ export default {
                 return await 处理WS请求(request, xxoo);
             }
         }
-        return new Response(JSON.stringify(request.cf, null, 2), {headers: {"Content-Type": "application/json; charset=utf-8"}});
+        const url = new URL(request.url);
+        const path = url.pathname.toLowerCase();
+        if (path == '/reset/pxy') {
+            缓存返袋解析数组 = null;
+            缓存返袋数组索引 = 0;
+            return new Response(getViewJSON());
+        } else {
+            return new Response(viewHtml(), {headers: {"Content-Type": "text/html; charset=utf-8"}});
+        }
     }
 };
 
@@ -459,4 +467,79 @@ async function validPxyIp(pxyip, port) {
         console.log(`[返袋IP验证服务发生异常] ${e.message}`);
         return;
     }
+}
+
+function viewHtml(){
+    return `
+    <!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reset Pxy</title>
+  <style>
+    body {
+      font-family: Consolas, Monaco, monospace;
+      background: #f6f8fa;
+      padding: 20px;
+    }
+    button {
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    pre {
+      margin-top: 16px;
+      padding: 16px;
+      background: #0d1117;
+      color: #c9d1d9;
+      border-radius: 6px;
+      overflow: auto;
+      max-height: 500px;
+    }
+  </style>
+</head>
+<body>
+
+  <button id="resetBtn">重置prxy</button>
+
+  <pre id="jsonView">
+${getViewJSON()}
+  </pre>
+
+  <script>
+    const btn = document.getElementById("resetBtn");
+    const jsonView = document.getElementById("jsonView");
+
+    btn.addEventListener("click", async () => {
+      jsonView.textContent = "请求中...";
+
+      try {
+        const resp = await fetch("/reset/pxy", {
+          method: "GET"
+        });
+        if (!resp.ok) {
+          throw new Error("HTTP " + resp.status);
+        }
+        const data = await resp.json();
+        jsonView.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        jsonView.textContent = JSON.stringify({
+          error: true,
+          message: err.message
+        }, null, 2);
+      }
+    });
+  </script>
+</body>
+</html>
+`
+}
+
+function getViewJSON(){
+    return `{
+    "返袋IP": "${返袋IP}",
+    "缓存返袋IP": "${缓存返袋IP ? 缓存返袋IP : ''}",
+    "缓存返袋数组索引": ${缓存返袋数组索引},
+    "缓存返袋解析数组": "${缓存返袋解析数组 ? JSON.stringify(缓存返袋解析数组, null, 2) : ''}"
+}`;
 }

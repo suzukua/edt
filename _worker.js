@@ -512,7 +512,7 @@ function viewHtml(){
   <button id="resetBtn">重置prxy</button>
 
   <pre id="jsonView">
-    ${getViewJSON()}
+${getViewJSON()}
   </pre>
 
   <script>

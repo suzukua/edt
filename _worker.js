@@ -7,27 +7,20 @@ let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0;
 export default {
     async fetch(request, env, ctx) {
         const upgradeHeader = request.headers.get('Upgrade');
-        if (upgradeHeader === 'websocket'){
-            let xxoo = '';
-            if (env.xxoo && env.xxoo.get) {
-                xxoo = await env.xxoo.get()
-            }
-            const stub = await getDo(env)
-            if (stub) {
-                return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxoo}});
-            } else {
+        let xxooId = '';
+        if (env.xxoo && env.xxoo.get) {
+            xxooId = await env.xxoo.get()
+        }
+        const stub = await getDo(env)
+        if (stub) {
+            return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxooId}});
+        } else {
+            if (upgradeHeader === 'websocket'){
                 await 返袋参数获取(request);
                 return await 处理WS请求(request, xxoo);
+            } else {
+                return processNoneWebSocket(request);
             }
-        }
-        const url = new URL(request.url);
-        const path = url.pathname.toLowerCase();
-        if (path == '/reset/pxy') {
-            缓存返袋解析数组 = null;
-            缓存返袋数组索引 = 0;
-            return new Response(getViewJSON());
-        } else {
-            return new Response(viewHtml(), {headers: {"Content-Type": "text/html; charset=utf-8"}});
         }
     }
 };
@@ -60,9 +53,14 @@ export class WsBigDo extends DurableObject {
      * @returns {Promise<Response>}
      */
     async fetch(request) {
-        const userId = request.headers.get('userid');
-        await 返袋参数获取(request);
-        return await 处理WS请求(request, userId);
+        const upgradeHeader = request.headers.get('Upgrade');
+        if (upgradeHeader === 'websocket'){
+            const userId = request.headers.get('userid');
+            await 返袋参数获取(request);
+            return await 处理WS请求(request, userId);
+        } else {
+            return processNoneWebSocket(request);
+        }
     }
 }
 
@@ -328,6 +326,17 @@ function base64ToArray(b64Str) {
     }
 }
 
+function processNoneWebSocket(request) {
+    const url = new URL(request.url);
+    const path = url.pathname.toLowerCase();
+    if (path == '/reset/pxy') {
+        缓存返袋解析数组 = null;
+        缓存返袋数组索引 = 0;
+        return new Response(getViewJSON(), {headers: {"Content-Type": "application/json; charset=utf-8"}});
+    } else {
+        return new Response(viewHtml(), {headers: {"Content-Type": "text/html; charset=utf-8"}});
+    }
+}
 
 async function 返袋参数获取(request) {
     const url = new URL(request.url);
@@ -503,7 +512,7 @@ function viewHtml(){
   <button id="resetBtn">重置prxy</button>
 
   <pre id="jsonView">
-${getViewJSON()}
+    ${getViewJSON()}
   </pre>
 
   <script>
@@ -536,10 +545,11 @@ ${getViewJSON()}
 }
 
 function getViewJSON(){
-    return `{
-    "返袋IP": "${返袋IP}",
-    "缓存返袋IP": "${缓存返袋IP ? 缓存返袋IP : ''}",
-    "缓存返袋数组索引": ${缓存返袋数组索引},
-    "缓存返袋解析数组": "${缓存返袋解析数组 ? JSON.stringify(缓存返袋解析数组, null, 2) : ''}"
-}`;
+    return  JSON.stringify({
+        "返袋IP": `${返袋IP}`,
+        "缓存返袋IP": `${缓存返袋IP ? 缓存返袋IP : ''}`,
+        "缓存返袋数组索引": `${缓存返袋数组索引}`,
+        "正在使用的返袋": `${缓存返袋解析数组 ? 缓存返袋解析数组[缓存返袋数组索引].join(':'): ''}`,
+        "缓存返袋解析数组": `${缓存返袋解析数组 ? 缓存返袋解析数组.map(item => item.join(':')) : ''}`
+    }, null, 2);
 }

@@ -17,7 +17,7 @@ export default {
         } else {
             if (upgradeHeader === 'websocket'){
                 await 返袋参数获取(request);
-                return await 处理WS请求(request, xxoo);
+                return await 处理WS请求(request, xxooId);
             } else {
                 return processNoneWebSocket(request);
             }

@@ -1,5 +1,5 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "pags-sub-manager"
+name = "pags-sb-manager"
 pages_build_output_dir = "dist/"
 compatibility_date = "2025-11-04"
 

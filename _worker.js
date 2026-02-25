@@ -214,7 +214,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         remoteConnWrapper.socket = initialSocket;
         connectStreams(initialSocket, ws, respHeader, connecttoPry, host, portNum);
     } catch (err) {
-        console.log(`[TCP转发] 直连失败: ${host}:${portNum}， 通过返袋重试`);
+        console.log(`[TCP转发] 直连失败: ${err.message}。${host}:${portNum}， 通过返袋重试`);
         await connecttoPry();
     }
 }

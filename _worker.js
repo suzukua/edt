@@ -1470,16 +1470,9 @@ async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) 
                         hasPort = colonIndex > -1 && /^\d+$/.test(hostPart.substring(colonIndex + 1));
                     }
                     const port = parsedUrl.searchParams.get('port') || 默认端口;
-                    const ipItem = hasPort ? line : `${hostPart}:${port}${remark}`;
+                    const ipItem = hasPort ? line : `${hostPart}:${port}`;
                     // 处理第一个数组 - 优选IP
-                    if (API备注名) {
-                        const 处理后IP = ipItem.includes('#')
-                            ? `${ipItem} [${API备注名}]`
-                            : `${ipItem}#[${API备注名}]`;
-                        results.add(处理后IP);
-                    } else {
-                        results.add(ipItem);
-                    }
+                    results.add(`${ipItem}#${API备注名 ? API备注名 : remark}`);
                 });
             } else {
                 const headers = lines[0].split(',').map(h => h.trim());

@@ -54,7 +54,7 @@ export class WsBigDo extends DurableObject {
      */
     async fetch(request) {
         const upgradeHeader = request.headers.get('Upgrade');
-        if (upgradeHeader === 'websocket'){
+        if (upgradeHeader === 'websocket') {
             const userId = request.headers.get('userid');
             await 返袋参数获取(request);
             return await 处理WS请求(request, userId);
@@ -69,32 +69,45 @@ async function 处理WS请求(request, yourUUID) {
     const wssPair = new WebSocketPair();
     const [clientSock, serverSock] = Object.values(wssPair);
     serverSock.accept();
-    let remoteConnWrapper = { socket: null };
+    // 增加 writer 缓存，避免重复加锁/解锁带来的性能损耗
+    let remoteConnWrapper = { socket: null, writer: null };
     let isDnsQuery = false;
     const earlyData = request.headers.get('sec-websocket-protocol') || '';
     const readable = makeReadableStr(serverSock, earlyData);
-    readable.pipeTo(new WritableStream({
-        async write(chunk) {
-            if (isDnsQuery) return await forwardataudp(chunk, serverSock, null);
-            if (remoteConnWrapper.socket) {
-                const writer = remoteConnWrapper.socket.writable.getWriter();
-                await writer.write(chunk);
-                writer.releaseLock();
-                return;
+
+    // 采用 for await...of 替代旧的 pipeTo(new WritableStream)，极大降低 GC 压力
+    (async () => {
+        try {
+            for await (const chunk of readable) {
+                if (isDnsQuery) {
+                    await forwardataudp(chunk, serverSock, null);
+                    continue;
+                }
+                if (remoteConnWrapper.socket) {
+                    // 保持 writer 锁的持续占用，而不是每个 chunk 都 getWriter 和 releaseLock
+                    if (!remoteConnWrapper.writer) {
+                        remoteConnWrapper.writer = remoteConnWrapper.socket.writable.getWriter();
+                    }
+                    await remoteConnWrapper.writer.write(chunk);
+                    continue;
+                }
+                const { port, hostname, rawIndex, version, isUDP } = 解析魏烈思请求(chunk, yourUUID);
+                if (isUDP) {
+                    if (port === 53) isDnsQuery = true;
+                    else throw new Error('UDP is not supported');
+                }
+                const respHeader = new Uint8Array([version[0], 0]);
+                const rawData = chunk.slice(rawIndex);
+                if (isDnsQuery) {
+                    await forwardataudp(rawData, serverSock, respHeader);
+                    continue;
+                }
+                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID);
             }
-            const { port, hostname, rawIndex, version, isUDP } = 解析魏烈思请求(chunk, yourUUID);
-            if (isUDP) {
-                if (port === 53) isDnsQuery = true;
-                else throw new Error('UDP is not supported');
-            }
-            const respHeader = new Uint8Array([version[0], 0]);
-            const rawData = chunk.slice(rawIndex);
-            if (isDnsQuery) return forwardataudp(rawData, serverSock, respHeader);
-            await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID);
-        },
-    })).catch((err) => {
-        // console.error('Readable pipe error:', err);
-    });
+        } catch (err) {
+            // console.error('Readable pipe error:', err);
+        }
+    })();
 
     return new Response(null, { status: 101, webSocket: clientSock });
 }
@@ -146,7 +159,6 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                     console.log(`[返袋连接] 尝试连接到: ${返袋地址}:${返袋端口} (索引: ${i})`);
                     await validPxyIp(返袋地址, 返袋端口);
                     remoteSock = connect({ hostname: 返袋地址, port: 返袋端口 });
-                    // 等待TCP连接真正建立，设置1秒超时
                     await Promise.race([
                         remoteSock.opened,
                         new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时')), 1000))
@@ -226,9 +238,12 @@ async function forwardataudp(udpChunk, webSocket, respHeader) {
         const writer = tcpSocket.writable.getWriter();
         await writer.write(udpChunk);
         writer.releaseLock();
-        await tcpSocket.readable.pipeTo(new WritableStream({
-            async write(chunk) {
-                if (webSocket.readyState === WebSocket.OPEN) {
+
+        // 采用 for await 替代 pipeTo，优化资源占用
+        (async () => {
+            try {
+                for await (const chunk of tcpSocket.readable) {
+                    if (webSocket.readyState !== WebSocket.OPEN) break;
                     if (weiHeader) {
                         const response = new Uint8Array(weiHeader.length + chunk.byteLength);
                         response.set(weiHeader, 0);
@@ -239,8 +254,10 @@ async function forwardataudp(udpChunk, webSocket, respHeader) {
                         webSocket.send(chunk);
                     }
                 }
-            },
-        }));
+            } catch (error) {
+                // Ignore disconnect errors
+            }
+        })();
     } catch (error) {
         // console.error('UDP forward error:', error);
     }
@@ -261,26 +278,25 @@ function formatIdentifier(arr, offset = 0) {
 }
 async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, host, portNum) {
     let header = headerData, hasData = false;
-    await remoteSocket.readable.pipeTo(
-        new WritableStream({
-            async write(chunk, controller) {
-                hasData = true;
-                if (webSocket.readyState !== WebSocket.OPEN) controller.error('ws.readyState is not open');
-                if (header) {
-                    const response = new Uint8Array(header.length + chunk.byteLength);
-                    response.set(header, 0);
-                    response.set(chunk, header.length);
-                    webSocket.send(response.buffer);
-                    header = null;
-                } else {
-                    webSocket.send(chunk);
-                }
-            },
-            abort() { },
-        })
-    ).catch((err) => {
+    try {
+        // 使用现代的迭代流语法，避开原有的 WritableStream 初始化样板
+        for await (const chunk of remoteSocket.readable) {
+            hasData = true;
+            if (webSocket.readyState !== WebSocket.OPEN) break;
+            if (header) {
+                const response = new Uint8Array(header.length + chunk.byteLength);
+                response.set(header, 0);
+                response.set(chunk, header.length);
+                webSocket.send(response.buffer);
+                header = null;
+            } else {
+                webSocket.send(chunk);
+            }
+        }
+    } catch (err) {
         closeSocketQuietly(webSocket);
-    });
+    }
+
     if (!hasData && retryFunc) {
         console.log(`[connectStreams] ${host}:${portNum} 远程连接无数据返回，执行重试逻辑`);
         await retryFunc();

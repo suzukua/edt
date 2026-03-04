@@ -1,5 +1,6 @@
 ﻿import {DurableObject} from 'cloudflare:workers';
 import {connect} from "cloudflare:sockets";
+import { Stream } from 'new-streams';
 
 let 返袋IP = '';
 let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0;
@@ -68,6 +69,14 @@ export class WsBigDo extends DurableObject {
     }
 }
 
+async function* flatten(readable) {
+    for await (const chunks of readable) {
+        for (const chunk of chunks) {
+            yield chunk;
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
 function 处理WS请求(request, yourUUID) {
     const wssPair = new WebSocketPair();
@@ -82,7 +91,7 @@ function 处理WS请求(request, yourUUID) {
     // 采用 for await...of 替代旧的 pipeTo(new WritableStream)，极大降低 GC 压力
     (async () => {
         try {
-            for await (const chunk of readable) {
+            for await (const chunk of flatten(readable)) {
                 if (isDnsQuery) {
                     await forwardataudp(chunk, serverSock, null);
                     continue;
@@ -95,7 +104,7 @@ function 处理WS请求(request, yourUUID) {
                     await remoteConnWrapper.writer.write(chunk);
                     continue;
                 }
-                const {hasError, message, port, hostname, rawIndex, version, isUDP,rawData } = 解析魏烈思请求(chunk, yourUUID);
+                const {hasError, message, port, hostname, version, isUDP,rawData } = 解析魏烈思请求(chunk, yourUUID);
                 if (hasError) {
                     console.log("[请求解析错误] 关闭连接", message);
                     return closeSocketQuietly(serverSock);
@@ -141,7 +150,7 @@ function 解析魏烈思请求(chunk, token) {
     const len = view.length;
 
     // 最小长度校验（早返回，减少后续工作）
-    if (len < 24) return { hasError: true, message: 'Invalid data' };
+    if (len < 24) return { hasError: true, message: `Invalid data, chunk size:${chunk.length}` };
 
     // 版本：直接用数字（不用 new Uint8Array）
     const version = view[0];
@@ -375,27 +384,63 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, ho
 
 function makeReadableStr(socket, earlyDataHeader) {
     let cancelled = false;
-    return new ReadableStream({
-        start(controller) {
-            socket.addEventListener('message', (event) => {
-                if (!cancelled) controller.enqueue(event.data);
-            });
-            socket.addEventListener('close', () => {
-                if (!cancelled) {
-                    closeSocketQuietly(socket);
-                    controller.close();
-                }
-            });
-            socket.addEventListener('error', (err) => controller.error(err));
-            const { earlyData, error } = base64ToArray(earlyDataHeader);
-            if (error) controller.error(error);
-            else if (earlyData) controller.enqueue(earlyData);
-        },
-        cancel() {
-            cancelled = true;
-            closeSocketQuietly(socket);
+    const { writer, readable } = Stream.push({
+        highWaterMark: 12,          // 控制缓冲大小
+        backpressure: 'block'       // 满时阻塞，防止内存膨胀
+    });
+    socket.addEventListener('message', async (event) => {
+        if (cancelled) return;
+        try {
+            const data = event.data;
+            // 确保是 Uint8Array
+            const chunk = data instanceof Uint8Array ? data : new Uint8Array(data);
+            // 单块写入（如果你有分包，可改成 writev）
+            await writer.write(chunk);
+        } catch (err) {
+            await writer.fail(err);
         }
     });
+    socket.addEventListener('close', async () => {
+        if (!cancelled) {
+            cancelled = true;
+            closeSocketQuietly(socket);
+            await writer.end();
+        }
+    });
+    socket.addEventListener('error', async (err) => {
+        await writer.fail(err);
+    });
+
+    // 处理 early data
+    const { earlyData, error } = base64ToArray(earlyDataHeader);
+    if (error) {
+        writer.fail(error);
+    } else if (earlyData) {
+        writer.write(earlyData);
+    }
+    // 返回的是 AsyncIterable<Uint8Array[]>
+    return readable;
+    // return new ReadableStream({
+    //     start(controller) {
+    //         socket.addEventListener('message', (event) => {
+    //             if (!cancelled) controller.enqueue(event.data);
+    //         });
+    //         socket.addEventListener('close', () => {
+    //             if (!cancelled) {
+    //                 closeSocketQuietly(socket);
+    //                 controller.close();
+    //             }
+    //         });
+    //         socket.addEventListener('error', (err) => controller.error(err));
+    //         const { earlyData, error } = base64ToArray(earlyDataHeader);
+    //         if (error) controller.error(error);
+    //         else if (earlyData) controller.enqueue(earlyData);
+    //     },
+    //     cancel() {
+    //         cancelled = true;
+    //         closeSocketQuietly(socket);
+    //     }
+    // });
 }
 
 function base64ToArray(b64Str) {

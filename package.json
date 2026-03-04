@@ -12,5 +12,8 @@
     "javascript-obfuscator": "^5.1.0",
     "vitest": "2.0.5",
     "wrangler": "^4.56.0"
+  },
+  "dependencies": {
+    "new-streams": "^0.2.3"
   }
 }

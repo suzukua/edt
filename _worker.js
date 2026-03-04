@@ -525,15 +525,11 @@ async function 解析地址端口(pryip) {
             }
         }
         缓存返袋解析数组 = 所有返袋数组;
-        // const 排序后数组 = 所有返袋数组.sort((a, b) => a[0].localeCompare(b[0]));
-        // const 目标根域名 = 目标域名.includes('.') ? 目标域名.split('.').slice(-2).join('.') : 目标域名;
-        // let 随机种子 = [...(目标根域名 + UUID)].reduce((a, c) => a + c.charCodeAt(0), 0);
-        // console.log(`[返袋解析] 随机种子: ${随机种子}\n目标站点: ${目标根域名}`)
-        // const 洗牌后 = [...排序后数组].sort(() => (随机种子 = (随机种子 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
-        // 缓存返袋解析数组 = 洗牌后.slice(0, 100);
         console.log(`[返袋解析] 解析完成 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
         缓存返袋IP = pryip;
-    } else console.log(`[返袋解析] 读取缓存 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+    } else {
+        console.log(`[返袋解析] 读取缓存 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
+    }
     return 缓存返袋解析数组;
 }
 

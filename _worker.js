@@ -314,7 +314,7 @@ async function forwardataudp(udpChunk, webSocket, respHeader) {
         writer.releaseLock();
 
         // 采用 for await 替代 pipeTo，优化资源占用
-        (async () => {
+        await (async () => {
             try {
                 for await (const chunk of tcpSocket.readable) {
                     if (webSocket.readyState !== WebSocket.OPEN) break;

@@ -61,7 +61,7 @@ export class WsBigDo extends DurableObject {
         if (upgradeHeader === 'websocket') {
             const userId = request.headers.get('userid');
             await 返袋参数获取(request);
-            return await 处理WS请求(request, userId);
+            return 处理WS请求(request, userId);
         } else {
             return processNoneWebSocket(request);
         }
@@ -69,7 +69,7 @@ export class WsBigDo extends DurableObject {
 }
 
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
-async function 处理WS请求(request, yourUUID) {
+function 处理WS请求(request, yourUUID) {
     const wssPair = new WebSocketPair();
     const [clientSock, serverSock] = Object.values(wssPair);
     serverSock.accept();
@@ -115,7 +115,6 @@ async function 处理WS请求(request, yourUUID) {
             // console.error('Readable pipe error:', err);
         }
     })();
-
     return new Response(null, { status: 101, webSocket: clientSock });
 }
 
@@ -428,13 +427,13 @@ function processNoneWebSocket(request) {
 async function 返袋参数获取(request) {
     const url = new URL(request.url);
     const { pathname, searchParams } = url;
-    const pathLower = pathname.toLowerCase();
     // 优先使用参数里面的proxyip
     if (searchParams.has('proxyip')) {
         const 路参IP = searchParams.get('proxyip');
         返袋IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
         return;
     } else {
+        const pathLower = pathname.toLowerCase();
         // 统一处理返袋IP参数 (优先级最高,使用正则一次匹配)
         const proxyMatch = pathLower.match(/\/(proxyip[.=]|pyip=|ip=)(.+)/);
         if (proxyMatch) {

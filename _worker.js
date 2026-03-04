@@ -3,6 +3,10 @@ import {connect} from "cloudflare:sockets";
 
 let 返袋IP = '';
 let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0;
+// 在模块顶部重用 TextDecoder（避免每次 new）
+const _TEXT_DECODER = new TextDecoder();
+let TOKEN_BYTES;//全局TOKEN
+
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
 export default {
     async fetch(request, env, ctx) {
@@ -91,18 +95,21 @@ async function 处理WS请求(request, yourUUID) {
                     await remoteConnWrapper.writer.write(chunk);
                     continue;
                 }
-                const { port, hostname, rawIndex, version, isUDP } = 解析魏烈思请求(chunk, yourUUID);
+                const {hasError, message, port, hostname, rawIndex, version, isUDP,rawData } = 解析魏烈思请求(chunk, yourUUID);
+                if (hasError) {
+                    console.log("[请求解析错误] 关闭连接", message);
+                    return closeSocketQuietly(serverSock);
+                }
                 if (isUDP) {
                     if (port === 53) isDnsQuery = true;
                     else throw new Error('UDP is not supported');
                 }
                 const respHeader = new Uint8Array([version[0], 0]);
-                const rawData = chunk.slice(rawIndex);
                 if (isDnsQuery) {
                     await forwardataudp(rawData, serverSock, respHeader);
                     continue;
                 }
-                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID);
+                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper);
             }
         } catch (err) {
             // console.error('Readable pipe error:', err);
@@ -112,42 +119,110 @@ async function 处理WS请求(request, yourUUID) {
     return new Response(null, { status: 101, webSocket: clientSock });
 }
 
+function uuidToBytes(uuid) {
+    const clean = uuid.replace(/-/g, '');
+    const out = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) {
+        out[i] = parseInt(clean.substr(i * 2, 2), 16);
+    }
+    return out;
+}
+
+
+function equal16(a, offset, b) {
+    for (let i = 0; i < 16; i++) {
+        if (a[offset + i] !== b[i]) return false;
+    }
+    return true;
+}
+
 function 解析魏烈思请求(chunk, token) {
-    if (chunk.byteLength < 24) return { hasError: true, message: 'Invalid data' };
-    const version = new Uint8Array(chunk.slice(0, 1));
-    if (formatIdentifier(new Uint8Array(chunk.slice(1, 17))) !== token) return { hasError: true, message: 'Invalid uuid' };
-    const optLen = new Uint8Array(chunk.slice(17, 18))[0];
-    const cmd = new Uint8Array(chunk.slice(18 + optLen, 19 + optLen))[0];
+    // 确保是 Uint8Array view（不复制内存）
+    const view = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+    const len = view.length;
+
+    // 最小长度校验（早返回，减少后续工作）
+    if (len < 24) return { hasError: true, message: 'Invalid data' };
+
+    // 版本：直接用数字（不用 new Uint8Array）
+    const version = view[0];
+
+    if (!TOKEN_BYTES) {
+        TOKEN_BYTES = uuidToBytes(token)
+    }
+    if (!equal16(view, 1, TOKEN_BYTES)) {
+        return { hasError: true, message: 'Invalid uuid' };
+    }
+
+    // 可选字段长度
+    const optLen = view[17];
+
+    // cmd 在 18 + optLen 位置，先做边界检查
+    const cmdIdx = 18 + optLen;
+    if (cmdIdx >= len) return { hasError: true, message: 'Truncated data (cmd)' };
+    const cmd = view[cmdIdx];
     let isUDP = false;
-    if (cmd === 1) { } else if (cmd === 2) { isUDP = true; } else { return { hasError: true, message: `command ${cmd} is not supported, command 01-tcp,02-udp,03-mux` }; }
+    if (cmd === 1) {
+        // tcp
+    } else if (cmd === 2) {
+        isUDP = true;
+    } else {
+        return { hasError: true, message: `command ${cmd} is not supported, command 01-tcp,02-udp,03-mux` };
+    }
+
+    // port 在 19 + optLen，使用单一 DataView（不创建多个）
     const portIdx = 19 + optLen;
-    const port = new DataView(chunk.slice(portIdx, portIdx + 2)).getUint16(0);
-    let addrIdx = portIdx + 2, addrLen = 0, addrValIdx = addrIdx + 1, hostname = '';
-    const addressType = new Uint8Array(chunk.slice(addrIdx, addrValIdx))[0];
+    if (portIdx + 2 > len) return { hasError: true, message: 'Truncated data (port)' };
+    const dv = new DataView(view.buffer, view.byteOffset, view.byteLength);
+    const port = dv.getUint16(portIdx); // 与原实现保持大端（DataView 默认 big-endian）
+
+    // address parsing
+    let addrIdx = portIdx + 2;
+    if (addrIdx >= len) return { hasError: true, message: 'Truncated data (addr type)' };
+    const addressType = view[addrIdx];
+    let addrValIdx = addrIdx + 1;
+    let hostname = '';
+    let addrLen = 0;
+
     switch (addressType) {
-        case 1:
+        case 1: // IPv4
             addrLen = 4;
-            hostname = new Uint8Array(chunk.slice(addrValIdx, addrValIdx + addrLen)).join('.');
+            if (addrValIdx + addrLen > len) return { hasError: true, message: 'Truncated data (ipv4)' };
+            // 直接拼字符串，避免在中间创建数组
+            hostname = `${view[addrValIdx]}.${view[addrValIdx + 1]}.${view[addrValIdx + 2]}.${view[addrValIdx + 3]}`;
             break;
-        case 2:
-            addrLen = new Uint8Array(chunk.slice(addrValIdx, addrValIdx + 1))[0];
+
+        case 2: // domain name (length-prefixed)
+            if (addrValIdx >= len) return { hasError: true, message: 'Truncated data (domain len)' };
+            addrLen = view[addrValIdx];
             addrValIdx += 1;
-            hostname = new TextDecoder().decode(chunk.slice(addrValIdx, addrValIdx + addrLen));
+            if (addrValIdx + addrLen > len) return { hasError: true, message: 'Truncated data (domain)' };
+            // 使用重用的 TextDecoder（高效）
+            hostname = _TEXT_DECODER.decode(view.subarray(addrValIdx, addrValIdx + addrLen));
             break;
-        case 3:
+
+        case 3: // IPv6 (16 bytes)
             addrLen = 16;
-            const ipv6 = [];
-            const ipv6View = new DataView(chunk.slice(addrValIdx, addrValIdx + addrLen));
-            for (let i = 0; i < 8; i++) ipv6.push(ipv6View.getUint16(i * 2).toString(16));
-            hostname = ipv6.join(':');
+            if (addrValIdx + addrLen > len) return { hasError: true, message: 'Truncated data (ipv6)' };
+            // 逐段读取 uint16 并转 16 进制，避免创建多余的中间 TypedArray
+            const parts = [];
+            for (let i = 0; i < 8; i++) {
+                // DataView 偏移为 addrValIdx + i*2（单位字节）
+                parts.push(dv.getUint16(addrValIdx + i * 2).toString(16));
+            }
+            hostname = parts.join(':');
             break;
+
         default:
             return { hasError: true, message: `Invalid address type: ${addressType}` };
     }
+
     if (!hostname) return { hasError: true, message: `Invalid address: ${addressType}` };
-    return { hasError: false, addressType, port, hostname, isUDP, rawIndex: addrValIdx + addrLen, version };
+
+    return { hasError: false, port, hostname, isUDP, version, rawData: view.subarray(addrValIdx + addrLen) };
 }
-async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
+
+async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper) {
     console.log(`[TCP转发] 目标: ${host}:${portNum} | 返袋IP: ${返袋IP} | 返袋类型: pryip}`);
 
     async function connectPxy(address, port, data, 所有返袋数组 = null, 返袋兜底 = true) {
@@ -212,7 +287,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 
     async function connecttoPry() {
         console.log(`[返袋连接] 代理到: ${host}:${portNum}, 反代IP：${返袋IP}`);
-        const 所有返袋数组 = await 解析地址端口(返袋IP, host, yourUUID);
+        const 所有返袋数组 = await 解析地址端口(返袋IP);
         let newSocket = await connectPxy(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有返袋数组, true);
         remoteConnWrapper.socket = newSocket;
         newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
@@ -272,10 +347,6 @@ function closeSocketQuietly(socket) {
     } catch (error) { }
 }
 
-function formatIdentifier(arr, offset = 0) {
-    const hex = [...arr.slice(offset, offset + 16)].map(b => b.toString(16).padStart(2, '0')).join('');
-    return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}`;
-}
 async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, host, portNum) {
     let header = headerData, hasData = false;
     try {
@@ -374,7 +445,7 @@ async function 返袋参数获取(request) {
     }
 }
 
-async function 解析地址端口(pryip, 目标域名 = 'dash.cloudflare.com', UUID = '00000000-0000-4000-8000-000000000000') {
+async function 解析地址端口(pryip) {
     if (!pryip) {
         return null;
     }

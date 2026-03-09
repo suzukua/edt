@@ -601,7 +601,7 @@ async function validPxyIp(pxyip, port) {
         }
     } catch (e) {
         console.log(`[返袋IP验证服务发生异常] ${e.message}`);
-        return;
+        throw e
     }
 }
 

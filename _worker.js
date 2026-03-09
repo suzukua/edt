@@ -361,6 +361,7 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, ho
         // 使用现代的迭代流语法，避开原有的 WritableStream 初始化样板
         for await (const chunk of remoteSocket.readable) {
             hasData = true;
+            console.log(`[数据转发] ${host}:${portNum} - 转发数据块，大小: ${chunk.byteLength} bytes, ${webSocket.readyState !== WebSocket.OPEN}`);
             if (webSocket.readyState !== WebSocket.OPEN) break;
             if (header) {
                 const response = new Uint8Array(header.length + chunk.byteLength);
@@ -373,12 +374,16 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, ho
             }
         }
     } catch (err) {
-        closeSocketQuietly(webSocket);
-    }
-
-    if (!hasData && retryFunc) {
-        console.log(`[connectStreams] ${host}:${portNum} 远程连接无数据返回，执行重试逻辑`);
-        await retryFunc();
+        console.log(`[数据转发] ${host}:${portNum} - 转发过程中发生错误: ${err.message} `);
+    } finally {
+        if (!hasData && retryFunc) {
+            console.log(`[connectStreams] ${host}:${portNum} 远程连接无数据返回，执行重试逻辑`);
+            await retryFunc();
+        } else {
+            //没有重试函数且已经有数据传输，说明是连接中途发生错误，记录日志但不执行重试逻辑
+            console.log(`[connectStreams] ${host}:${portNum} 连接结束，已传输数据: ${hasData}, 不执行重试逻辑`);
+            closeSocketQuietly(webSocket);
+        }
     }
 }
 

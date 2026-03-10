@@ -69,13 +69,6 @@ export class WsBigDo extends DurableObject {
     }
 }
 
-async function* flatten(readable) {
-    for await (const chunks of readable) {
-        for (const chunk of chunks) {
-            yield chunk;
-        }
-    }
-}
 
 ///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
 function 处理WS请求(request, yourUUID) {
@@ -90,14 +83,13 @@ function 处理WS请求(request, yourUUID) {
 
     // 采用 for await...of 替代旧的 pipeTo(new WritableStream)，极大降低 GC 压力
     (async () => {
-        try {
-            for await (const chunk of flatten(readable)) {
+        for await (const chunks of readable) {
+            for (const chunk of chunks) {
                 if (isDnsQuery) {
                     await forwardataudp(chunk, serverSock, null);
                     continue;
                 }
                 if (remoteConnWrapper.socket) {
-                    // 保持 writer 锁的持续占用，而不是每个 chunk 都 getWriter 和 releaseLock
                     if (!remoteConnWrapper.writer) {
                         remoteConnWrapper.writer = remoteConnWrapper.socket.writable.getWriter();
                     }
@@ -110,8 +102,11 @@ function 处理WS请求(request, yourUUID) {
                     return closeSocketQuietly(serverSock);
                 }
                 if (isUDP) {
-                    if (port === 53) isDnsQuery = true;
-                    else throw new Error('UDP is not supported');
+                    if (port === 53){
+                        isDnsQuery = true;
+                    } else {
+                        throw new Error('UDP is not supported');
+                    }
                 }
                 const respHeader = new Uint8Array([version[0], 0]);
                 if (isDnsQuery) {
@@ -120,8 +115,6 @@ function 处理WS请求(request, yourUUID) {
                 }
                 await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper);
             }
-        } catch (err) {
-            // console.error('Readable pipe error:', err);
         }
     })();
     return new Response(null, { status: 101, webSocket: clientSock });
@@ -390,30 +383,30 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, ho
 function makeReadableStr(socket, earlyDataHeader) {
     let cancelled = false;
     const { writer, readable } = Stream.push({
-        highWaterMark: 12,          // 控制缓冲大小
+        highWaterMark: 16,          // 控制缓冲大小
         backpressure: 'block'       // 满时阻塞，防止内存膨胀
     });
-    socket.addEventListener('message', async (event) => {
+    socket.addEventListener('message', (event) => {
         if (cancelled) return;
         try {
             const data = event.data;
             // 确保是 Uint8Array
             const chunk = data instanceof Uint8Array ? data : new Uint8Array(data);
             // 单块写入（如果你有分包，可改成 writev）
-            await writer.write(chunk);
+            writer.write(chunk);
         } catch (err) {
-            await writer.fail(err);
+            writer.fail(err);
         }
     });
-    socket.addEventListener('close', async () => {
+    socket.addEventListener('close', () => {
         if (!cancelled) {
             cancelled = true;
             closeSocketQuietly(socket);
-            await writer.end();
+            writer.end();
         }
     });
-    socket.addEventListener('error', async (err) => {
-        await writer.fail(err);
+    socket.addEventListener('error', (err) => {
+        writer.fail(err);
     });
 
     // 处理 early data

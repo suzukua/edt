@@ -1242,9 +1242,9 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
 async function 生成随机IP(request, count = 16, 指定端口 = -1) {
     const ISP配置 = {
         '9808': { file: 'cmcc', name: 'CF移动优选' },
-        '4837': { file: 'cu', name: 'CF联通优选' },
-        '17623': { file: 'cu', name: 'CF联通优选' },
-        '17816': { file: 'cu', name: 'CF联通优选' },
+        '4837': { file: 'cu', name: 'CF联通优选1' },
+        '17623': { file: 'cu', name: 'CF联通优选2' },
+        '17816': { file: 'cu', name: 'CF联通优选3' },
         '4134': { file: 'ct', name: 'CF电信优选' },
     };
     const asn = request.cf.asn, isp = ISP配置[asn];

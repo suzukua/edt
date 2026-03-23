@@ -315,7 +315,7 @@ export default {
                                 return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议 + ECHLINK参数}&host=example.com&fp=${config_JSON.Fingerprint}&sni=example.com&path=${encodeURIComponent(config_JSON.随机路径 ? 随机路径(完整节点路径) : 完整节点路径) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&insecure=1&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
                             }).filter(item => item !== null).join('\n');
                         } else { // 订阅转换
-                            const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
+                            const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&asn=' + request.cf.asn + '&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
                             try {
                                 const response = await fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel(https://github.com/cmliu/edge' + 'tunnel)' } });
                                 if (response.ok) {
@@ -1241,13 +1241,14 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
 
 async function 生成随机IP(request, count = 16, 指定端口 = -1) {
     const ISP配置 = {
-        '9808': { file: 'cmcc', name: 'CF移动优选' },
-        '4837': { file: 'cu', name: 'CF联通优选1' },
-        '17623': { file: 'cu', name: 'CF联通优选2' },
-        '17816': { file: 'cu', name: 'CF联通优选3' },
-        '4134': { file: 'ct', name: 'CF电信优选' },
+        '9808': { file: 'cmcc', name: '移动' },
+        '4837': { file: 'cu', name: '联通1' },
+        '17623': { file: 'cu', name: '联通2' },
+        '17816': { file: 'cu', name: '联通3' },
+        '4134': { file: 'ct', name: '电信' },
     };
-    const asn = request.cf.asn, isp = ISP配置[asn];
+    let url = new URL(request.url)
+    const asn = url.searchParams.get('asn') || request.cf.asn, isp = ISP配置[asn];
     const cidr_url = isp ? `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/${isp.file}.txt` : 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
     const cfname = isp?.name || 'CF官方优选';
     const cfport = [443, 2053, 2083, 2087, 2096, 8443];

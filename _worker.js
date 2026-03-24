@@ -239,11 +239,13 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                         remoteSock.opened,
                         new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时')), 1000))
                     ]);
-                    const testWriter = remoteSock.writable.getWriter();
-                    try {
-                        await testWriter.write(data);
-                    } finally {
-                        testWriter.releaseLock(); // 无论成功失败，必须释放锁
+                    if (getLength(data)) {
+                        const testWriter = remoteSock.writable.getWriter();
+                        try {
+                            await testWriter.write(data);
+                        } finally {
+                            testWriter.releaseLock(); // 无论成功失败，必须释放锁
+                        }
                     }
                     console.log(`[返袋连接] 成功连接到: ${返袋地址}:${返袋端口}`);
                     缓存返袋数组索引 = i;
@@ -262,11 +264,13 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         if (返袋兜底) {
             console.log(`[返袋兜底] 连接到: ${address}:${port}`)
             remoteSock = connect({ hostname: address, port: port });
-            const writer = remoteSock.writable.getWriter();
-            try {
-                await writer.write(data);
-            } finally {
-                writer.releaseLock(); // 无论成功失败，必须释放锁
+            if (getLength(data)) {
+                const writer = remoteSock.writable.getWriter();
+                try {
+                    await writer.write(data);
+                } finally {
+                    writer.releaseLock(); // 无论成功失败，必须释放锁
+                }
             }
             return remoteSock;
         } else {
@@ -277,11 +281,13 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 
     async function connectDirect(address, port, data) {
         let remoteSock = connect({ hostname: address, port: port });
-        const writer = remoteSock.writable.getWriter();
-        try {
-            await writer.write(data);
-        } finally {
-            writer.releaseLock(); // 无论成功失败，必须释放锁
+        if (getLength(data)) {
+            const writer = remoteSock.writable.getWriter();
+            try {
+                await writer.write(data);
+            } finally {
+                writer.releaseLock(); // 无论成功失败，必须释放锁
+            }
         }
         return remoteSock;
     }
@@ -485,6 +491,13 @@ async function 返袋参数获取(request) {
             return;
         }
     }
+}
+
+function getLength(data) {
+    if (!data) return 0;
+    if (typeof data.byteLength === 'number') return data.byteLength;
+    if (typeof data.length === 'number') return data.length;
+    return 0;
 }
 
 async function 解析地址端口(pryip) {

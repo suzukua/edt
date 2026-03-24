@@ -1241,15 +1241,15 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
 
 async function 生成随机IP(request, count = 16, 指定端口 = -1) {
     const ISP配置 = {
-        '9808': { file: 'cmcc', name: '移动' },
-        '4837': { file: 'cu', name: '联通1' },
-        '17623': { file: 'cu', name: '联通2' },
-        '17816': { file: 'cu', name: '联通3' },
-        '4134': { file: 'ct', name: '电信' },
+        '9808': { file: 'cmcc', name: '移动', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cmcc.txt` },
+        '4837': { file: 'cu', name: '联通1', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
+        '17623': { file: 'cu', name: '联通2', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
+        '17816': { file: 'cu', name: '联通3', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
+        '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/master/ct.txt` },
     };
     let url = new URL(request.url)
     const asn = url.searchParams.get('asn') || request.cf.asn, isp = ISP配置[asn];
-    const cidr_url = isp ? `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/${isp.file}.txt` : 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
+    const cidr_url = isp ? isp.url : 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
     const cfname = isp?.name || 'CF官方优选';
     const cfport = [443, 2053, 2083, 2087, 2096, 8443];
     let cidrList = [];

@@ -16,12 +16,12 @@ export default {
         if (env.xxoo && env.xxoo.get) {
             xxooId = await env.xxoo.get()
         }
-        const stub = await getDo(env)
+        const stub = await getDo(env, request.cf.colo)
         if (stub) {
             return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxooId}});
         } else {
             if (upgradeHeader === 'websocket'){
-                await 返袋参数获取(request);
+                返袋参数获取(request);
                 return await 处理WS请求(request, xxooId);
             } else {
                 return processNoneWebSocket(request);
@@ -31,11 +31,11 @@ export default {
 };
 
 
-function getDo(env){
+function getDo(env, cfColo){
     if (!env.WsBigDo) {
         return null;
     }
-    const doLocation = env.REGION || "apac";
+    const doLocation = cfColo || "apac";
     const name = `user-${doLocation}`;
     const id = env.WsBigDo.idFromName(name);
     return env.WsBigDo.get(id, {locationHint: doLocation})
@@ -61,7 +61,7 @@ export class WsBigDo extends DurableObject {
         const upgradeHeader = request.headers.get('Upgrade');
         if (upgradeHeader === 'websocket') {
             const userId = request.headers.get('userid');
-            await 返袋参数获取(request);
+            返袋参数获取(request);
             return 处理WS请求(request, userId);
         } else {
             return processNoneWebSocket(request);
@@ -473,7 +473,7 @@ function processNoneWebSocket(request) {
     }
 }
 
-async function 返袋参数获取(request) {
+function 返袋参数获取(request) {
     const url = new URL(request.url);
     const { pathname, searchParams } = url;
     // 优先使用参数里面的proxyip

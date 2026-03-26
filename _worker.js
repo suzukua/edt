@@ -35,8 +35,8 @@ function getDo(env, cfColo){
     if (!env.WsBigDo) {
         return null;
     }
-    const doLocation = cfColo || "apac";
-    const name = `user-${doLocation}`;
+    const doLocation = env.REGION || "apac";
+    const name = `user-${cfColo || doLocation}`;
     const id = env.WsBigDo.idFromName(name);
     return env.WsBigDo.get(id, {locationHint: doLocation})
 }

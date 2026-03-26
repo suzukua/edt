@@ -16,7 +16,8 @@ export default {
         if (env.xxoo && env.xxoo.get) {
             xxooId = await env.xxoo.get()
         }
-        const stub = await getDo(env, request.cf.colo)
+        const url = new URL(request.url);
+        const stub = await getDo(env, url.searchParams.get(`colo`) || request.cf.colo)
         if (stub) {
             return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxooId}});
         } else {
@@ -634,6 +635,23 @@ function viewHtml(){
       font-size: 14px;
       cursor: pointer;
     }
+    button,
+    .btn-link {
+      display: inline-block;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      text-decoration: none;   /* 去掉a标签下划线 */
+      color: #000;
+    }
+    
+    button:hover,
+    .btn-link:hover {
+      background: #f3f4f6;
+    }
     pre {
       margin-top: 16px;
       padding: 16px;
@@ -648,7 +666,8 @@ function viewHtml(){
 <body>
 
   <button id="resetBtn">重置prxy</button>
-
+  <a href="/?colo=NRT" class="btn-link">日本成田机房（NRT）</a>
+  <a href="/?colo=SIN" class="btn-link">新加坡机房（SIN）</a>
   <pre id="jsonView">
 ${getViewJSON()}
   </pre>

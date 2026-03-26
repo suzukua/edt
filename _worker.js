@@ -680,7 +680,7 @@ ${getViewJSON()}
       jsonView.textContent = "请求中...";
 
       try {
-        const resp = await fetch("/reset/pxy", {
+        const resp = await fetch("/reset/pxy" + window.location.search, {
           method: "GET"
         });
         if (!resp.ok) {

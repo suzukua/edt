@@ -1245,7 +1245,8 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
         '4837': { file: 'cu', name: '联通1', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
         '17623': { file: 'cu', name: '联通2', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
         '17816': { file: 'cu', name: '联通3', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
-        '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/master/ct.txt` },
+        // '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/master/ct.txt` },
+        '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/ct.txt` },
     };
     let url = new URL(request.url)
     const asn = url.searchParams.get('asn') || request.cf.asn, isp = ISP配置[asn];

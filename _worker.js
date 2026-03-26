@@ -16,7 +16,7 @@ export default {
         if (env.xxoo && env.xxoo.get) {
             xxooId = await env.xxoo.get()
         }
-        const stub = await getDo(env, request.searchParams.get(`color`) || request.cf.colo)
+        const stub = await getDo(env, request.cf.colo)
         if (stub) {
             return stub.fetch(request, {headers: {...Object.fromEntries(request.headers), "userid": xxooId}});
         } else {

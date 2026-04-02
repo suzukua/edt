@@ -188,7 +188,18 @@ export default {
                     }
 
                     ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Admin_Login', config_JSON));
-                    return fetch(Pages静态页面 + '/admin');
+                    const res = await fetch(Pages静态页面 + '/admin');
+                    return new HTMLRewriter()
+                        .on("div.cf-stats-grid", {
+                            element(e) {
+                                if (config_JSON.CF.DoUsage.success) {
+                                    e.append("<div class=\"cf-stat-item\">\n" +
+                                        "                                    <div class=\"cf-stat-label\">Durable Objects用量</div>\n" +
+                                        "                                    <div class=\"cf-stat-value cf-value-orange\" id=\"cfDODailyQuota\">" + config_JSON.CF.DoUsage.total + "/" + config_JSON.CF.DoUsage.max + "</div>\n" +
+                                        "                                </div>", { html: true });
+                                }
+                            }
+                        }).transform(res);
                 } else if (访问路径 === 'logout' || uuidRegex.test(访问路径)) {//清除cookie并跳转到登录页面
                     const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
                     响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');

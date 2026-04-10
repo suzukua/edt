@@ -268,7 +268,7 @@ async function 读取XHP首包(reader, token) {
     const 密码哈希 = sha224(token);
     const 密码哈希字节 = new TextEncoder().encode(密码哈希);
 
-    const 尝试解析VLESS首包 = (data) => {
+    const 尝试解析威乐斯首包 = (data) => {
         const length = data.byteLength;
         if (length < 18) return { 状态: 'need_more' };
         const view = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -413,17 +413,17 @@ async function 读取XHP首包(reader, token) {
         const 木马结果 = 尝试解析木马首包(当前数据);
         if (木马结果.状态 === 'ok') return { ...木马结果.结果, reader };
 
-        const vless结果 = 尝试解析VLESS首包(当前数据);
-        if (vless结果.状态 === 'ok') return { ...vless结果.结果, reader };
+        const 维列私结果 = 尝试解析威乐斯首包(当前数据);
+        if (维列私结果.状态 === 'ok') return { ...维列私结果.结果, reader };
 
-        if (木马结果.状态 === 'invalid' && vless结果.状态 === 'invalid') return null;
+        if (木马结果.状态 === 'invalid' && 维列私结果.状态 === 'invalid') return null;
     }
 
     const 最终数据 = buffer.subarray(0, offset);
     const 最终木马结果 = 尝试解析木马首包(最终数据);
     if (最终木马结果.状态 === 'ok') return { ...最终木马结果.结果, reader };
-    const 最终VLESS结果 = 尝试解析VLESS首包(最终数据);
-    if (最终VLESS结果.状态 === 'ok') return { ...最终VLESS结果.结果, reader };
+    const 最终威乐斯结果 = 尝试解析威乐斯首包(最终数据);
+    if (最终威乐斯结果.状态 === 'ok') return { ...最终威乐斯结果.结果, reader };
     return null;
 }
 

@@ -6,7 +6,8 @@ let 返袋IP = '';
 let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0;
 // 在模块顶部重用 TextDecoder（避免每次 new）
 const _TEXT_DECODER = new TextDecoder();
-let TOKEN_BYTES;//全局TOKEN
+let TOKEN_BYTES, //全局TOKEN
+    调试日志打印 = true;
 
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
 export default {
@@ -23,13 +24,23 @@ export default {
         } else {
             if (upgradeHeader === 'websocket'){
                 返袋参数获取(request);
-                return await 处理WS请求(request, xxooId);
+                return 处理WS请求(request, xxooId);
             } else {
+                const referer = request.headers.get('Referer') || '';
+                const 命中XHP特征 = referer.includes('x_padding', 14) || referer.includes('x_padding=');
+                if (命中XHP特征) {
+                    console.log(`[XHTTP] 命中请求: ${url.pathname}${url.search}`);
+                    return await 处理XHP请求(request, xxooId);
+                }
                 return processNoneWebSocket(request);
             }
         }
     }
 };
+
+function log(...args) {
+    if (调试日志打印) console.log(...args);
+}
 
 
 function getDo(env, cfColo){
@@ -119,6 +130,301 @@ function 处理WS请求(request, yourUUID) {
         }
     })();
     return new Response(null, { status: 101, webSocket: clientSock });
+}
+
+async function 处理XHP请求(request, xxooId) {
+    if (!request.body) return new Response('Bad Request', { status: 400 });
+    const reader = request.body.getReader();
+    const 首包 = await 读取XHP首包(reader, xxooId);
+    if (!首包) {
+        try { reader.releaseLock() } catch (e) { }
+        return new Response('Invalid request', { status: 400 });
+    }
+    if (首包.isUDP && 首包.port !== 53) {
+        try { reader.releaseLock() } catch (e) { }
+        return new Response('UDP is not supported', { status: 400 });
+    }
+
+    const remoteConnWrapper = { socket: null, connectingPromise: null, retryConnect: null };
+    let 当前写入Socket = null;
+    let 远端写入器 = null;
+    const responseHeaders = new Headers({
+        'Content-Type': 'application/octet-stream',
+        'X-Accel-Buffering': 'no',
+        'Cache-Control': 'no-store'
+    });
+
+    const 释放远端写入器 = () => {
+        if (远端写入器) {
+            try { 远端写入器.releaseLock() } catch (e) { }
+            远端写入器 = null;
+        }
+        当前写入Socket = null;
+    };
+
+    const 获取远端写入器 = () => {
+        const socket = remoteConnWrapper.socket;
+        if (!socket) return null;
+        if (socket !== 当前写入Socket) {
+            释放远端写入器();
+            当前写入Socket = socket;
+            远端写入器 = socket.writable.getWriter();
+        }
+        return 远端写入器;
+    };
+
+    return new Response(new ReadableStream({
+        async start(controller) {
+            let 已关闭 = false;
+            let udpRespHeader = 首包.respHeader;
+            const XHPBridge = {
+                readyState: WebSocket.OPEN,
+                send(data) {
+                    if (已关闭) return;
+                    try {
+                        const chunk = data instanceof Uint8Array
+                            ? data
+                            : data instanceof ArrayBuffer
+                                ? new Uint8Array(data)
+                                : ArrayBuffer.isView(data)
+                                    ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+                                    : new Uint8Array(data);
+                        controller.enqueue(chunk);
+                    } catch (e) {
+                        已关闭 = true;
+                        this.readyState = WebSocket.CLOSED;
+                    }
+                },
+                close() {
+                    if (已关闭) return;
+                    已关闭 = true;
+                    this.readyState = WebSocket.CLOSED;
+                    try { controller.close() } catch (e) { }
+                }
+            };
+
+            const 写入远端 = async (payload, allowRetry = true) => {
+                const writer = 获取远端写入器();
+                if (!writer) return false;
+                try {
+                    await writer.write(payload);
+                    return true;
+                } catch (err) {
+                    释放远端写入器();
+                    if (allowRetry && typeof remoteConnWrapper.retryConnect === 'function') {
+                        await remoteConnWrapper.retryConnect();
+                        return await 写入远端(payload, false);
+                    }
+                    throw err;
+                }
+            };
+
+            try {
+                if (首包.isUDP) {
+                    if (首包.rawData?.byteLength) {
+                        await forwardataudp(首包.rawData, XHPBridge, udpRespHeader);
+                        udpRespHeader = null;
+                    }
+                } else {
+                    await forwardataTCP(首包.hostname, 首包.port, 首包.rawData, XHPBridge, 首包.respHeader, remoteConnWrapper, xxooId);
+                }
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    if (!value || value.byteLength === 0) continue;
+                    if (首包.isUDP) {
+                        await forwardataudp(value, XHPBridge, udpRespHeader);
+                        udpRespHeader = null;
+                    } else {
+                        if (!(await 写入远端(value))) throw new Error('Remote socket is not ready');
+                    }
+                }
+
+                if (!首包.isUDP) {
+                    const writer = 获取远端写入器();
+                    if (writer) {
+                        try { await writer.close() } catch (e) { }
+                    }
+                }
+            } catch (err) {
+                log(`[XHP转发] 处理失败: ${err?.message || err}`);
+                closeSocketQuietly(XHPBridge);
+            } finally {
+                释放远端写入器();
+                try { reader.releaseLock() } catch (e) { }
+            }
+        },
+        cancel() {
+            释放远端写入器();
+            try { remoteConnWrapper.socket?.close() } catch (e) { }
+            try { reader.releaseLock() } catch (e) { }
+        }
+    }), { status: 200, headers: responseHeaders });
+}
+
+async function 读取XHP首包(reader, token) {
+    const decoder = new TextDecoder();
+    const 密码哈希 = sha224(token);
+    const 密码哈希字节 = new TextEncoder().encode(密码哈希);
+
+    const 尝试解析VLESS首包 = (data) => {
+        const length = data.byteLength;
+        if (length < 18) return { 状态: 'need_more' };
+        const view = data instanceof Uint8Array ? data : new Uint8Array(data);
+        if (!TOKEN_BYTES) {
+            TOKEN_BYTES = uuidToBytes(token)
+        }
+        if (!equal16(view, 1, TOKEN_BYTES)) {
+            return { hasError: true, message: 'Invalid uuid' };
+        }
+
+        const optLen = data[17];
+        const cmdIndex = 18 + optLen;
+        if (length < cmdIndex + 1) return { 状态: 'need_more' };
+
+        const cmd = data[cmdIndex];
+        if (cmd !== 1 && cmd !== 2) return { 状态: 'invalid' };
+
+        const portIndex = cmdIndex + 1;
+        if (length < portIndex + 3) return { 状态: 'need_more' };
+
+        const port = (data[portIndex] << 8) | data[portIndex + 1];
+        const addressType = data[portIndex + 2];
+        const addressIndex = portIndex + 3;
+        let headerLen = -1;
+        let hostname = '';
+
+        if (addressType === 1) {
+            if (length < addressIndex + 4) return { 状态: 'need_more' };
+            hostname = `${data[addressIndex]}.${data[addressIndex + 1]}.${data[addressIndex + 2]}.${data[addressIndex + 3]}`;
+            headerLen = addressIndex + 4;
+        } else if (addressType === 2) {
+            if (length < addressIndex + 1) return { 状态: 'need_more' };
+            const domainLen = data[addressIndex];
+            if (length < addressIndex + 1 + domainLen) return { 状态: 'need_more' };
+            hostname = decoder.decode(data.subarray(addressIndex + 1, addressIndex + 1 + domainLen));
+            headerLen = addressIndex + 1 + domainLen;
+        } else if (addressType === 3) {
+            if (length < addressIndex + 16) return { 状态: 'need_more' };
+            const ipv6 = [];
+            for (let i = 0; i < 8; i++) {
+                const base = addressIndex + i * 2;
+                ipv6.push(((data[base] << 8) | data[base + 1]).toString(16));
+            }
+            hostname = ipv6.join(':');
+            headerLen = addressIndex + 16;
+        } else return { 状态: 'invalid' };
+
+        if (!hostname) return { 状态: 'invalid' };
+
+        return {
+            状态: 'ok',
+            结果: {
+                协议: 'vl' + 'ess',
+                hostname,
+                port,
+                isUDP: cmd === 2,
+                rawData: data.subarray(headerLen),
+                respHeader: new Uint8Array([data[0], 0]),
+            }
+        };
+    };
+
+    const 尝试解析木马首包 = (data) => {
+        const length = data.byteLength;
+        if (length < 58) return { 状态: 'need_more' };
+        if (data[56] !== 0x0d || data[57] !== 0x0a) return { 状态: 'invalid' };
+        for (let i = 0; i < 56; i++) {
+            if (data[i] !== 密码哈希字节[i]) return { 状态: 'invalid' };
+        }
+
+        const socksStart = 58;
+        if (length < socksStart + 2) return { 状态: 'need_more' };
+        const cmd = data[socksStart];
+        if (cmd !== 1) return { 状态: 'invalid' };
+
+        const atype = data[socksStart + 1];
+        let cursor = socksStart + 2;
+        let hostname = '';
+
+        if (atype === 1) {
+            if (length < cursor + 4) return { 状态: 'need_more' };
+            hostname = `${data[cursor]}.${data[cursor + 1]}.${data[cursor + 2]}.${data[cursor + 3]}`;
+            cursor += 4;
+        } else if (atype === 3) {
+            if (length < cursor + 1) return { 状态: 'need_more' };
+            const domainLen = data[cursor];
+            if (length < cursor + 1 + domainLen) return { 状态: 'need_more' };
+            hostname = decoder.decode(data.subarray(cursor + 1, cursor + 1 + domainLen));
+            cursor += 1 + domainLen;
+        } else if (atype === 4) {
+            if (length < cursor + 16) return { 状态: 'need_more' };
+            const ipv6 = [];
+            for (let i = 0; i < 8; i++) {
+                const base = cursor + i * 2;
+                ipv6.push(((data[base] << 8) | data[base + 1]).toString(16));
+            }
+            hostname = ipv6.join(':');
+            cursor += 16;
+        } else return { 状态: 'invalid' };
+
+        if (!hostname) return { 状态: 'invalid' };
+        if (length < cursor + 4) return { 状态: 'need_more' };
+
+        const port = (data[cursor] << 8) | data[cursor + 1];
+        if (data[cursor + 2] !== 0x0d || data[cursor + 3] !== 0x0a) return { 状态: 'invalid' };
+        const dataOffset = cursor + 4;
+
+        return {
+            状态: 'ok',
+            结果: {
+                协议: 'trojan',
+                hostname,
+                port,
+                isUDP: false,
+                rawData: data.subarray(dataOffset),
+                respHeader: null,
+            }
+        };
+    };
+
+    let buffer = new Uint8Array(1024);
+    let offset = 0;
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+            if (offset === 0) return null;
+            break;
+        }
+
+        const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+        if (offset + chunk.byteLength > buffer.byteLength) {
+            const newBuffer = new Uint8Array(Math.max(buffer.byteLength * 2, offset + chunk.byteLength));
+            newBuffer.set(buffer.subarray(0, offset));
+            buffer = newBuffer;
+        }
+
+        buffer.set(chunk, offset);
+        offset += chunk.byteLength;
+
+        const 当前数据 = buffer.subarray(0, offset);
+        const 木马结果 = 尝试解析木马首包(当前数据);
+        if (木马结果.状态 === 'ok') return { ...木马结果.结果, reader };
+
+        const vless结果 = 尝试解析VLESS首包(当前数据);
+        if (vless结果.状态 === 'ok') return { ...vless结果.结果, reader };
+
+        if (木马结果.状态 === 'invalid' && vless结果.状态 === 'invalid') return null;
+    }
+
+    const 最终数据 = buffer.subarray(0, offset);
+    const 最终木马结果 = 尝试解析木马首包(最终数据);
+    if (最终木马结果.状态 === 'ok') return { ...最终木马结果.结果, reader };
+    const 最终VLESS结果 = 尝试解析VLESS首包(最终数据);
+    if (最终VLESS结果.状态 === 'ok') return { ...最终VLESS结果.结果, reader };
+    return null;
 }
 
 function uuidToBytes(uuid) {
@@ -615,6 +921,39 @@ async function validPxyIp(pxyip, port) {
         console.log(`[返袋IP验证服务发生异常] ${e.message}`);
         throw e
     }
+}
+
+function sha224(s) {
+    const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+    const r = (n, b) => ((n >>> b) | (n << (32 - b))) >>> 0;
+    s = unescape(encodeURIComponent(s));
+    const l = s.length * 8; s += String.fromCharCode(0x80);
+    while ((s.length * 8) % 512 !== 448) s += String.fromCharCode(0);
+    const h = [0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4];
+    const hi = Math.floor(l / 0x100000000), lo = l & 0xFFFFFFFF;
+    s += String.fromCharCode((hi >>> 24) & 0xFF, (hi >>> 16) & 0xFF, (hi >>> 8) & 0xFF, hi & 0xFF, (lo >>> 24) & 0xFF, (lo >>> 16) & 0xFF, (lo >>> 8) & 0xFF, lo & 0xFF);
+    const w = []; for (let i = 0; i < s.length; i += 4)w.push((s.charCodeAt(i) << 24) | (s.charCodeAt(i + 1) << 16) | (s.charCodeAt(i + 2) << 8) | s.charCodeAt(i + 3));
+    for (let i = 0; i < w.length; i += 16) {
+        const x = new Array(64).fill(0);
+        for (let j = 0; j < 16; j++)x[j] = w[i + j];
+        for (let j = 16; j < 64; j++) {
+            const s0 = r(x[j - 15], 7) ^ r(x[j - 15], 18) ^ (x[j - 15] >>> 3);
+            const s1 = r(x[j - 2], 17) ^ r(x[j - 2], 19) ^ (x[j - 2] >>> 10);
+            x[j] = (x[j - 16] + s0 + x[j - 7] + s1) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, h0] = h;
+        for (let j = 0; j < 64; j++) {
+            const S1 = r(e, 6) ^ r(e, 11) ^ r(e, 25), ch = (e & f) ^ (~e & g), t1 = (h0 + S1 + ch + K[j] + x[j]) >>> 0;
+            const S0 = r(a, 2) ^ r(a, 13) ^ r(a, 22), maj = (a & b) ^ (a & c) ^ (b & c), t2 = (S0 + maj) >>> 0;
+            h0 = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+        }
+        for (let j = 0; j < 8; j++)h[j] = (h[j] + (j === 0 ? a : j === 1 ? b : j === 2 ? c : j === 3 ? d : j === 4 ? e : j === 5 ? f : j === 6 ? g : h0)) >>> 0;
+    }
+    let hex = '';
+    for (let i = 0; i < 7; i++) {
+        for (let j = 24; j >= 0; j -= 8)hex += ((h[i] >>> j) & 0xFF).toString(16).padStart(2, '0');
+    }
+    return hex;
 }
 
 function viewHtml(){

@@ -321,70 +321,12 @@ async function 读取XHP首包(reader, token) {
         return {
             状态: 'ok',
             结果: {
-                协议: 'vl' + 'ess',
+                协议: atob("dmxlc3M="),
                 hostname,
                 port,
                 isUDP: cmd === 2,
                 rawData: data.subarray(headerLen),
                 respHeader: new Uint8Array([data[0], 0]),
-            }
-        };
-    };
-
-    const 尝试解析木马首包 = (data) => {
-        const length = data.byteLength;
-        if (length < 58) return { 状态: 'need_more' };
-        if (data[56] !== 0x0d || data[57] !== 0x0a) return { 状态: 'invalid' };
-        for (let i = 0; i < 56; i++) {
-            if (data[i] !== 密码哈希字节[i]) return { 状态: 'invalid' };
-        }
-
-        const socksStart = 58;
-        if (length < socksStart + 2) return { 状态: 'need_more' };
-        const cmd = data[socksStart];
-        if (cmd !== 1) return { 状态: 'invalid' };
-
-        const atype = data[socksStart + 1];
-        let cursor = socksStart + 2;
-        let hostname = '';
-
-        if (atype === 1) {
-            if (length < cursor + 4) return { 状态: 'need_more' };
-            hostname = `${data[cursor]}.${data[cursor + 1]}.${data[cursor + 2]}.${data[cursor + 3]}`;
-            cursor += 4;
-        } else if (atype === 3) {
-            if (length < cursor + 1) return { 状态: 'need_more' };
-            const domainLen = data[cursor];
-            if (length < cursor + 1 + domainLen) return { 状态: 'need_more' };
-            hostname = decoder.decode(data.subarray(cursor + 1, cursor + 1 + domainLen));
-            cursor += 1 + domainLen;
-        } else if (atype === 4) {
-            if (length < cursor + 16) return { 状态: 'need_more' };
-            const ipv6 = [];
-            for (let i = 0; i < 8; i++) {
-                const base = cursor + i * 2;
-                ipv6.push(((data[base] << 8) | data[base + 1]).toString(16));
-            }
-            hostname = ipv6.join(':');
-            cursor += 16;
-        } else return { 状态: 'invalid' };
-
-        if (!hostname) return { 状态: 'invalid' };
-        if (length < cursor + 4) return { 状态: 'need_more' };
-
-        const port = (data[cursor] << 8) | data[cursor + 1];
-        if (data[cursor + 2] !== 0x0d || data[cursor + 3] !== 0x0a) return { 状态: 'invalid' };
-        const dataOffset = cursor + 4;
-
-        return {
-            状态: 'ok',
-            结果: {
-                协议: 'trojan',
-                hostname,
-                port,
-                isUDP: false,
-                rawData: data.subarray(dataOffset),
-                respHeader: null,
             }
         };
     };
@@ -410,18 +352,10 @@ async function 读取XHP首包(reader, token) {
         offset += chunk.byteLength;
 
         const 当前数据 = buffer.subarray(0, offset);
-        const 木马结果 = 尝试解析木马首包(当前数据);
-        if (木马结果.状态 === 'ok') return { ...木马结果.结果, reader };
 
         const 维列私结果 = 尝试解析威乐斯首包(当前数据);
         if (维列私结果.状态 === 'ok') return { ...维列私结果.结果, reader };
-
-        if (木马结果.状态 === 'invalid' && 维列私结果.状态 === 'invalid') return null;
     }
-
-    const 最终数据 = buffer.subarray(0, offset);
-    const 最终木马结果 = 尝试解析木马首包(最终数据);
-    if (最终木马结果.状态 === 'ok') return { ...最终木马结果.结果, reader };
     const 最终威乐斯结果 = 尝试解析威乐斯首包(最终数据);
     if (最终威乐斯结果.状态 === 'ok') return { ...最终威乐斯结果.结果, reader };
     return null;

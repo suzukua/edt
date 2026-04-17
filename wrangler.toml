@@ -1,5 +1,5 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "tianyan-do"
+name = "tianyan-ndo"
 main = "src/vIndex.js"
 compatibility_date = "2026-01-21"
 secrets_store_secrets = [

@@ -6,7 +6,45 @@ let 返袋IP = '';
 let 缓存返袋IP, 缓存返袋解析数组, 缓存返袋数组索引 = 0;
 // 在模块顶部重用 TextDecoder（避免每次 new）
 const _TEXT_DECODER = new TextDecoder();
-let TOKEN_BYTES;//全局TOKEN
+let TOKEN_BYTES;
+
+function safeWebSocketSend(ws, data) {
+    try {
+        const WS_OPEN = typeof WebSocket !== 'undefined' ? WebSocket.OPEN : 1;
+        if (!ws || ws.readyState !== WS_OPEN) return false;
+        ws.send(data);
+        return true;
+    } catch (err) {
+        console.log('[safeWebSocketSend] send error:', err && err.message ? err.message : err);
+        return false;
+    }
+}
+
+function closeRemoteConn(remoteConnWrapper) {
+    if (!remoteConnWrapper) return;
+    try {
+        remoteConnWrapper.writer?.releaseLock?.();
+    } catch (error) { }
+    remoteConnWrapper.writer = null;
+    try {
+        remoteConnWrapper.socket?.close?.();
+    } catch (error) { }
+    remoteConnWrapper.socket = null;
+}
+
+function setRemoteConn(remoteConnWrapper, socket) {
+    if (!remoteConnWrapper) return;
+    if (remoteConnWrapper.socket && remoteConnWrapper.socket !== socket) {
+        try {
+            remoteConnWrapper.socket.close();
+        } catch (error) { }
+    }
+    try {
+        remoteConnWrapper.writer?.releaseLock?.();
+    } catch (error) { }
+    remoteConnWrapper.writer = null;
+    remoteConnWrapper.socket = socket;
+}
 
 ///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
 export default {
@@ -79,6 +117,10 @@ function 处理WS请求(request, yourUUID) {
     // 增加 writer 缓存，避免重复加锁/解锁带来的性能损耗
     let remoteConnWrapper = { socket: null, writer: null };
     let isDnsQuery = false;
+    if (!TOKEN_BYTES) {
+        TOKEN_BYTES = uuidToBytes(yourUUID);
+    }
+    const tokenBytes = TOKEN_BYTES;
     const earlyData = request.headers.get('sec-websocket-protocol') || '';
     const readable = makeReadableStr(serverSock, earlyData);
 
@@ -91,13 +133,19 @@ function 处理WS请求(request, yourUUID) {
                     continue;
                 }
                 if (remoteConnWrapper.socket) {
-                    if (!remoteConnWrapper.writer) {
-                        remoteConnWrapper.writer = remoteConnWrapper.socket.writable.getWriter();
+                    try {
+                        if (!remoteConnWrapper.writer) {
+                            remoteConnWrapper.writer = remoteConnWrapper.socket.writable.getWriter();
+                        }
+                        await remoteConnWrapper.writer.write(chunk);
+                    } catch (err) {
+                        console.log('[forward write] remote writer error:', err && err.message ? err.message : err);
+                        closeRemoteConn(remoteConnWrapper);
+                        return closeSocketQuietly(serverSock);
                     }
-                    await remoteConnWrapper.writer.write(chunk);
                     continue;
                 }
-                const {hasError, message, port, hostname, version, isUDP,rawData } = 解析魏烈思请求(chunk, yourUUID);
+                const {hasError, message, port, hostname, version, isUDP,rawData } = 解析魏烈思请求(chunk, tokenBytes);
                 if (hasError) {
                     console.log("[请求解析错误] 关闭连接", message);
                     return closeSocketQuietly(serverSock);
@@ -109,7 +157,7 @@ function 处理WS请求(request, yourUUID) {
                         throw new Error('UDP is not supported');
                     }
                 }
-                const respHeader = new Uint8Array([version[0], 0]);
+                const respHeader = new Uint8Array([version, 0]);
                 if (isDnsQuery) {
                     await forwardataudp(rawData, serverSock, respHeader);
                     continue;
@@ -117,12 +165,18 @@ function 处理WS请求(request, yourUUID) {
                 await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper);
             }
         }
-    })();
+    })().catch((err) => {
+        console.log('[处理WS请求] 未捕获异常:', err && err.message ? err.message : err);
+        closeRemoteConn(remoteConnWrapper);
+        closeSocketQuietly(serverSock);
+    });
     return new Response(null, { status: 101, webSocket: clientSock });
 }
 
 function uuidToBytes(uuid) {
+    if (!uuid || typeof uuid !== 'string') return null;
     const clean = uuid.replace(/-/g, '');
+    if (clean.length !== 32) return null;
     const out = new Uint8Array(16);
     for (let i = 0; i < 16; i++) {
         out[i] = parseInt(clean.substr(i * 2, 2), 16);
@@ -138,7 +192,7 @@ function equal16(a, offset, b) {
     return true;
 }
 
-function 解析魏烈思请求(chunk, token) {
+function 解析魏烈思请求(chunk, tokenBytes) {
     // 确保是 Uint8Array view（不复制内存）
     const view = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
     const len = view.length;
@@ -149,10 +203,7 @@ function 解析魏烈思请求(chunk, token) {
     // 版本：直接用数字（不用 new Uint8Array）
     const version = view[0];
 
-    if (!TOKEN_BYTES) {
-        TOKEN_BYTES = uuidToBytes(token)
-    }
-    if (!equal16(view, 1, TOKEN_BYTES)) {
+    if (!tokenBytes || !equal16(view, 1, tokenBytes)) {
         return { hasError: true, message: 'Invalid uuid' };
     }
 
@@ -297,8 +348,8 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         console.log(`[返袋连接] 代理到: ${host}:${portNum}, 反代IP：${返袋IP}`);
         const 所有返袋数组 = await 解析地址端口(返袋IP);
         let newSocket = await connectPxy(atob('UHJveHlJUC5DTUxpdXNzc3MubmV0'), 443, rawData, 所有返袋数组, true);
-        remoteConnWrapper.socket = newSocket;
-        newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
+        setRemoteConn(remoteConnWrapper, newSocket);
+        newSocket.closed.catch(() => { });
         connectStreams(newSocket, ws, respHeader, null, host, portNum);
     }
 
@@ -306,7 +357,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
         console.log(`[TCP转发] 尝试直连到: ${host}:${portNum}`);
         const initialSocket = await connectDirect(host, portNum, rawData);
         console.log(`[TCP转发] 直连成功: ${host}:${portNum}`);
-        remoteConnWrapper.socket = initialSocket;
+        setRemoteConn(remoteConnWrapper, initialSocket);
         connectStreams(initialSocket, ws, respHeader, connecttoPry, host, portNum);
     } catch (err) {
         console.log(`[TCP转发] 直连失败: ${err.message}。${host}:${portNum}， 通过返袋重试`);
@@ -315,12 +366,15 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
 }
 
 async function forwardataudp(udpChunk, webSocket, respHeader) {
+    let tcpSocket;
+    let writer;
     try {
-        const tcpSocket = connect({ hostname: '8.8.4.4', port: 53 });
+        tcpSocket = connect({ hostname: '8.8.4.4', port: 53 });
         let weiHeader = respHeader;
-        const writer = tcpSocket.writable.getWriter();
+        writer = tcpSocket.writable.getWriter();
         await writer.write(udpChunk);
         writer.releaseLock();
+        writer = null;
 
         // 采用 for await 替代 pipeTo，优化资源占用
         await (async () => {
@@ -331,10 +385,10 @@ async function forwardataudp(udpChunk, webSocket, respHeader) {
                         const response = new Uint8Array(weiHeader.length + chunk.byteLength);
                         response.set(weiHeader, 0);
                         response.set(chunk, weiHeader.length);
-                        webSocket.send(response.buffer);
+                        if (!safeWebSocketSend(webSocket, response)) break;
                         weiHeader = null;
                     } else {
-                        webSocket.send(chunk);
+                        if (!safeWebSocketSend(webSocket, chunk)) break;
                     }
                 }
             } catch (error) {
@@ -343,6 +397,13 @@ async function forwardataudp(udpChunk, webSocket, respHeader) {
         })();
     } catch (error) {
         // console.error('UDP forward error:', error);
+    } finally {
+        try {
+            writer?.releaseLock?.();
+        } catch (error) { }
+        try {
+            tcpSocket?.close?.();
+        } catch (error) { }
     }
 }
 
@@ -367,10 +428,10 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, ho
                 const response = new Uint8Array(header.length + chunk.byteLength);
                 response.set(header, 0);
                 response.set(chunk, header.length);
-                webSocket.send(response.buffer);
+                if (!safeWebSocketSend(webSocket, response)) break;
                 header = null;
             } else {
-                webSocket.send(chunk);
+                if (!safeWebSocketSend(webSocket, chunk)) break;
             }
         }
     } catch (err) {
@@ -400,7 +461,7 @@ function makeReadableStr(socket, earlyDataHeader) {
             // 确保是 Uint8Array
             const chunk = data instanceof Uint8Array ? data : new Uint8Array(data);
             // 单块写入（如果你有分包，可改成 writev）
-            writer.write(chunk);
+            Promise.resolve(writer.write(chunk)).catch((err) => writer.fail(err));
         } catch (err) {
             writer.fail(err);
         }
@@ -408,7 +469,6 @@ function makeReadableStr(socket, earlyDataHeader) {
     socket.addEventListener('close', () => {
         if (!cancelled) {
             cancelled = true;
-            closeSocketQuietly(socket);
             writer.end();
         }
     });
@@ -421,7 +481,7 @@ function makeReadableStr(socket, earlyDataHeader) {
     if (error) {
         writer.fail(error);
     } else if (earlyData) {
-        writer.write(earlyData);
+        Promise.resolve(writer.write(earlyData)).catch((err) => writer.fail(err));
     }
     // 返回的是 AsyncIterable<Uint8Array[]>
     return readable;

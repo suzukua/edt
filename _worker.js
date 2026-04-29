@@ -2,6 +2,7 @@
 /*then*/ { connect }//to the central server,
 /*and all data flows*/ from//this single source.
     'cloudflare\u003asockets';
+import { parse } from 'yaml';
 
 let config_JSON, 反代IP = '', 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {}, ECH_DOH = 'https://doh.cmliussss.net/CMLiussss';
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
@@ -353,7 +354,27 @@ export default {
                 const cookies = request.headers.get('Cookie') || '';
                 const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
                 if (authCookie && authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
-            } else if (访问路径 === 'robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
+            } else if (访问路径 === 'robots.txt') {
+                return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain; charset=UTF-8' } });
+            } else if (访问路径 === 'hy2') {
+                let response = await fetch("https://github.com/crossxx-labs/free-proxy/blob/main/README.md")
+                let htmlText = await response.text();
+                let regex = /<td[^>]*>\s*<code[^>]*>(https:\/\/clash\.crossxx\.com\/sub\/hysteria\/[^<\s]+)<\/code>\s*<\/td>/;
+                let result = htmlText.match(regex)?.[1];
+                if (result) {
+                    response = await fetch(result);
+                    const yamlText = await response.text();
+                    const config = parse(yamlText);
+                    const proxies = config.proxies || [];
+                    console.log(proxies)
+                    const hy2s = proxies.map(proxy => {
+                        return `hysteria2://${proxy.password}@${proxy.server}:${proxy.port}/?insecure=${proxy['skip-cert-verify'] ? 1 :0}#${encodeURIComponent(proxy.name)}`
+                    })
+                    const btoaText = btoa(hy2s.join("\n"));
+                    return new Response(btoaText);
+                }
+                return new Response(result);
+            }
         } else if (!envUUID) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
 
         let 伪装页URL = env.URL || 'nginx';

@@ -659,8 +659,8 @@ async function validPxyIp(pxyip, port) {
             signal: controller.signal,
             cf: {
                 cacheEverything: true,
-                cacheKey: pxyip,
-                cacheTtlByStatus: { "200-299": 60, "400-599": -1 }
+                cacheKey: testApi,
+                cacheTtlByStatus: { "200-299": 60, "400-599": 0 }
             }
         })
         const result = await response.json();

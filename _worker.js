@@ -651,7 +651,7 @@ async function 解析地址端口(pryip) {
 
 async function validPxyIp(pxyip, port) {
     console.log(`[返袋IP验证] ${pxyip}${port ? ":" + port : ""}`);
-    const testApi = `${atob("aHR0cHM6Ly9jaGVjay5wcm94eWlwLmNtbGl1c3Nzcy5uZXQvY2hlY2s")}?proxyip=${pxyip}${port ? ":" + port : ""}`
+    const testApi = `${atob("aHR0cHM6Ly9hcGkuMDkwMjI3Lnh5ei9jaGVjaw==")}?proxyip=${pxyip}${port ? ":" + port : ""}`
     const controller = new AbortController()
     setTimeout(() => controller.abort(), 800)
     try {

@@ -285,7 +285,7 @@ async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnW
                 const [返袋地址, 返袋端口] = 所有返袋数组[i];
                 try {
                     console.log(`[返袋连接] 尝试连接到: ${返袋地址}:${返袋端口} (索引: ${i})`);
-                    await validPxyIp(返袋地址, 返袋端口);
+                    await validPxyIp1(返袋地址, 返袋端口);
                     remoteSock = connect({ hostname: 返袋地址, port: 返袋端口 });
                     await Promise.race([
                         remoteSock.opened,
@@ -647,6 +647,34 @@ async function 解析地址端口(pryip) {
         console.log(`[返袋解析] 读取缓存 总数: ${缓存返袋解析数组.length}个\n${缓存返袋解析数组.map(([ip, port], index) => `${index + 1}. ${ip}:${port}`).join('\n')}`);
     }
     return 缓存返袋解析数组;
+}
+
+async function validPxyIp1(pxyip, port) {
+    console.log(`[返袋IP验证] ${pxyip}${port ? ":" + port : ""}`);
+    const testApi = `${atob('aHR0cHM6Ly9wci1hcGlzLmVrdC5tZS9wcm9iZQ==')}?candidate=${pxyip}${port ? ":" + port : ""}`
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 3000)
+    try {
+        const response = await fetch(testApi, {
+            signal: controller.signal,
+            cf: {
+                cacheEverything: true,
+                cacheKey: testApi,
+                cacheTtlByStatus: { "200-299": 60, "400-599": 0 }
+            }
+        })
+        const result = await response.json();
+        if (result.ok) {
+            console.log(`[返袋IP验证结果] ${result.candidate} - 地区：${result.exit_country}--${result.exit_city}, 可用性: ${result.ok}`);
+            return;
+        } else {
+            console.log(`[返袋IP验证结果] ${pxyip}${port ? ":" + port : ""} - 不可用！`);
+            throw new Error('validPxyIp检查到返袋IP不可用');
+        }
+    } catch (e) {
+        console.log(`[返袋IP验证服务发生异常] ${e.message}`);
+        throw e
+    }
 }
 
 async function validPxyIp(pxyip, port) {

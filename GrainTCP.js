@@ -240,7 +240,6 @@ const mkDn = w => {
         mq = 0;
         if (!p) return;
         w.send(pb.subarray(0, p).slice());
-        pb = new Uint8Array(cap);
         p = 0;
         qr = 0;
     };
@@ -270,12 +269,6 @@ const mkDn = w => {
             let o = 0, n = u?.byteLength || 0;
             if (!n) return;
             while (o < n) {
-                if (!p && n - o >= cap) {
-                    const m = Math.min(cap, n - o);
-                    w.send(o || m !== n ? u.subarray(o, o + m) : u);
-                    o += m;
-                    continue;
-                }
                 const m = Math.min(cap - p, n - o);
                 pb.set(u.subarray(o, o + m), p);
                 p += m;
@@ -301,7 +294,7 @@ const mill = async (rd, w, onFirst) => {
                 } catch {
                 }
             }
-            if (v.byteLength >= (CFG.chunk >> 1)) tx.reap(), w.send(v), buf = new ArrayBuffer(CFG.chunk); else tx.send(v.slice()), buf = v.buffer;
+            if (v.byteLength >= CFG.dnPack) tx.reap(), w.send(v), buf = new ArrayBuffer(CFG.chunk); else tx.send(v.slice()), buf = v.buffer;
         }
         tx.reap();
     } catch {

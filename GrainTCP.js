@@ -15,8 +15,6 @@ const fmtErr = e => e?.message || e;
 let proxyCacheHost = '';
 let proxyCacheList = null;
 let proxyCacheIndex = 0;
-const proxyCheckedOk = new Set();   // 探活确认可用
-const proxyCheckedBad = new Set();  // 探活明确不可用
 export default {
     fetch: async (req, env) => {
         if (!CFG.id && env.xxoo && env.xxoo.get) {
@@ -139,8 +137,6 @@ const resolveProxyList = async s => {
 };
 const checkProxy = async (host, port) => {
     const candidate = `${host}:${port}`;
-    if (proxyCheckedOk.has(candidate)) return;
-    if (proxyCheckedBad.has(candidate)) throw new Error('proxyip unavailable');
     console.log(`[GrainTCP] [proxyip检测] 开始检测 | candidate=${candidate}`);
     const testApi = `${atob('aHR0cHM6Ly9wci1hcGlzLmVrdC5tZS9wcm9iZQ==')}?candidate=${candidate}`;
     const controller = new AbortController();
@@ -156,11 +152,9 @@ const checkProxy = async (host, port) => {
         });
         const result = await response.json();
         if (!result?.ok) {
-            proxyCheckedBad.add(candidate);
             console.log(`[GrainTCP] [proxyip检测] 不可用 | candidate=${candidate}`);
             throw new Error('proxyip unavailable');
         }
-        proxyCheckedOk.add(candidate);
         console.log(`[GrainTCP] [proxyip检测] 可用 | candidate=${result.candidate || candidate} | 地区=${result.exit_country || '-'}-${result.exit_city || '-'}`);
     } catch (e) {
         if (e.message === 'proxyip unavailable') throw e;
@@ -170,7 +164,7 @@ const checkProxy = async (host, port) => {
         clearTimeout(timer);
     }
 };
-const vless = c => {
+const vls = c => {
     if (c.length < 24 || !matchID(c)) return null;
     let o = 19 + c[17];
     const p = (c[o] << 8) | c[o + 1];
@@ -474,7 +468,7 @@ const ws = async (req, env) => {
                 if (!sock) {
                     const [d] = uq.bundle();
                     if (!d) break;
-                    const r = vless(d);
+                    const r = vls(d);
                     if (!r) {
                         wither();
                         return;

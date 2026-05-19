@@ -325,7 +325,11 @@ export default {
                             return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议 + ECHLINK参数}&host=example.com&fp=${config_JSON.Fingerprint}&sni=example.com&path=${encodeURIComponent(config_JSON.随机路径 ? 随机路径(完整节点路径) : 完整节点路径) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&insecure=1&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
                         }).filter(item => item !== null).join('\n');
                     } else { // 订阅转换
-                        const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&asn=' + request.cf.asn + '&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
+                        const clientIp = request.headers.get("CF-Connecting-IP") || '';
+                        const needIpv6 = url.searchParams.has("ipv6") || 判断IP版本(clientIp) === 6;
+                        console.log(`clientIp: ${clientIp}, needIpv6: ${needIpv6}`);
+                        const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed' + (needIpv6 ? '&ipv6=1' : '') + '&asOrg=' + 识别运营商(request) + '&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
+                        console.log(`订阅转换URL: ${订阅转换URL}`)
                         try {
                             const response = await fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel(https://github.com/cmliu/edge' + 'tunnel)' } });
                             if (response.ok) {
@@ -1269,12 +1273,10 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
 }
 
 async function 生成随机IP(request, count = 16, 指定端口 = -1) {
-    const clientIp = request.headers.get("CF-Connecting-IP") || '';
-    const version = 判断IP版本(clientIp);
     const totalCount = Math.max(0, Number.parseInt(count, 10) || 0);
     const ISP配置 = {
         'cmcc': { name: '移动', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cmcc.txt` },
-        'cu': { name: '联通1', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
+        'cu': { name: '联通', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
         'ct': { name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/master/ct.txt` },
         // '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/ct.txt` },
     };
@@ -1288,13 +1290,13 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
     const 查询参数运营商 = String(url.searchParams.get('asOrg') || '').toLowerCase();
     const 运营商文件标识 = ['ct', 'cu', 'cmcc', 'cf'].includes(查询参数运营商) ? 查询参数运营商 : 识别运营商(request);
     const isp = ISP配置[运营商文件标识];
-    console.log(`请求IP: ${clientIp} 识别运营商: ${运营商文件标识 || '未知'} 查询参数运营商: ${查询参数运营商 || '无'}`);
+    console.log(`【生成随机IP】识别运营商: ${运营商文件标识 || '未知'} 查询参数运营商: ${查询参数运营商 || '无'}`);
     const cidr_url = isp ? isp.url : 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
-    const cfname = 运营商名称映射[运营商文件标识] || 'CF官方优选';
+    const cfname = isp.name || 'CF官方优选';
     const cfport = [443, 2053, 2083, 2087, 2096, 8443];
     const 默认IPv4CIDR = ['104.16.0.0/13'];
     const 默认IPv6CIDR = ['2606:4700::/32'];
-    const 需要混合生成 = url.searchParams.has("ipv6") ? true : version === 6;
+    const 需要混合生成 = url.searchParams.has("ipv6") || 判断IP版本(request.headers.get("CF-Connecting-IP") || '') === 6;
 
     const 过滤指定版本CIDR = (cidrList, ipVersion) => cidrList.filter(cidr => {
         const 原始CIDR = String(cidr).trim();
@@ -1375,9 +1377,9 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
         return `[${BigInt转IPv6(networkIP + 生成随机BigInt(hostBits))}]`;
     };
 
-    const 生成地址列表 = (数量, cidrList, 生成IP) => Array.from({ length: 数量 }, () => {
+    const 生成地址列表 = (数量, cidrList, 生成IP, ipVersion) => Array.from({ length: 数量 }, () => {
         const ip = 生成IP(cidrList[Math.floor(Math.random() * cidrList.length)]);
-        return `${ip}:${指定端口 === -1 ? cfport[Math.floor(Math.random() * cfport.length)] : 指定端口}#${cfname}`;
+        return `${ip}:${指定端口 === -1 ? cfport[Math.floor(Math.random() * cfport.length)] : 指定端口}#${cfname}${ipVersion === 4 ? 'IPv4' : 'IPv6'}`;
     });
 
     const 打乱数组 = (arr) => {
@@ -1391,8 +1393,8 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
     const ipv4Count = 需要混合生成 ? Math.ceil(totalCount / 2) : totalCount;
     const ipv6Count = 需要混合生成 ? Math.floor(totalCount / 2) : 0;
     const randomIPs = 打乱数组([
-        ...生成地址列表(ipv4Count, 可用IPv4CIDR, generateRandomIPv4FromCIDR),
-        ...生成地址列表(ipv6Count, 可用IPv6CIDR, generateRandomIPv6FromCIDR),
+        ...生成地址列表(ipv4Count, 可用IPv4CIDR, generateRandomIPv4FromCIDR, 4),
+        ...生成地址列表(ipv6Count, 可用IPv6CIDR, generateRandomIPv6FromCIDR, 6),
     ]);
     return [randomIPs, randomIPs.join('\n')];
 }

@@ -151,7 +151,7 @@ const checkProxy = async (host, port) => {
     log(`[FuckTCP] [proxyip检测] 开始检测 | candidate=${candidate}`);
     const testApi = `${atob('aHR0cHM6Ly9wci1hcGlzLmVrdC5tZS9wcm9iZQ==')}?candidate=${candidate}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 1000);
     try {
         const response = await fetch(testApi, {
             signal: controller.signal,

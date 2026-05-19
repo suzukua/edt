@@ -1,5 +1,6 @@
 const CFG = {
     id: '',
+    log: false,
     chunk: 64 * 1024,
     dnPack: 32 * 1024,
     dnTail: 512,
@@ -13,6 +14,15 @@ const CFG = {
 const DEF_PROXY_HOST = atob('UHJveHlJUC5DTUxpdXNzc3MubmV0');
 const DEF_PROXY_PORT = 443;
 const fmtErr = e => e?.message || e;
+const log = (...args) => {
+    CFG.log && console.log(...args);
+};
+const warn = (...args) => {
+    console.warn(...args);
+};
+const error = (...args) => {
+    console.error(...args);
+};
 let proxyCacheHost = '';
 let proxyCacheList = null;
 let proxyCacheIndex = 0;
@@ -101,14 +111,14 @@ const dohQuery = async (host, type) => {
         const data = await resp.json();
         return data?.Answer || [];
     } catch (e) {
-        console.log(`[GrainTCP] [proxyip解析] DoH查询失败 | host=${host} | type=${type} | 错误=${fmtErr(e)}`);
+        warn(`[FuckTCP] [proxyip解析] DoH查询失败 | host=${host} | type=${type} | 错误=${fmtErr(e)}`);
         return [];
     }
 };
 const resolveProxyList = async s => {
     const raw = (s || '').trim() || DEF_PROXY_HOST;
     if (proxyCacheHost === raw && proxyCacheList?.length) {
-        console.log(`[GrainTCP] [proxyip解析] 命中缓存 | proxyip=${raw} | 候选=${proxyCacheList.map(([h, p]) => `${h}:${p}`).join(', ')}`);
+        log(`[FuckTCP] [proxyip解析] 命中缓存 | proxyip=${raw} | 候选=${proxyCacheList.map(([h, p]) => `${h}:${p}`).join(', ')}`);
         return proxyCacheList;
     }
     const hp = splitHP(raw) || [DEF_PROXY_HOST, DEF_PROXY_PORT];
@@ -133,12 +143,12 @@ const resolveProxyList = async s => {
     });
     proxyCacheHost = raw;
     proxyCacheIndex = 0;
-    console.log(`[GrainTCP] [proxyip解析] 完成 | proxyip=${raw} | 候选=${proxyCacheList.map(([h, p]) => `${h}:${p}`).join(', ')}`);
+    log(`[FuckTCP] [proxyip解析] 完成 | proxyip=${raw} | 候选=${proxyCacheList.map(([h, p]) => `${h}:${p}`).join(', ')}`);
     return proxyCacheList;
 };
 const checkProxy = async (host, port) => {
     const candidate = `${host}:${port}`;
-    console.log(`[GrainTCP] [proxyip检测] 开始检测 | candidate=${candidate}`);
+    log(`[FuckTCP] [proxyip检测] 开始检测 | candidate=${candidate}`);
     const testApi = `${atob('aHR0cHM6Ly9wci1hcGlzLmVrdC5tZS9wcm9iZQ==')}?candidate=${candidate}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
@@ -153,14 +163,14 @@ const checkProxy = async (host, port) => {
         });
         const result = await response.json();
         if (!result?.ok) {
-            console.log(`[GrainTCP] [proxyip检测] 不可用 | candidate=${candidate}`);
+            warn(`[FuckTCP] [proxyip检测] 不可用 | candidate=${candidate}`);
             throw new Error('proxyip unavailable');
         }
-        console.log(`[GrainTCP] [proxyip检测] 可用 | candidate=${result.candidate || candidate} | 地区=${result.exit_country || '-'}-${result.exit_city || '-'}`);
+        log(`[FuckTCP] [proxyip检测] 可用 | candidate=${result.candidate || candidate} | 地区=${result.exit_country || '-'}-${result.exit_city || '-'}`);
     } catch (e) {
         if (e.message === 'proxyip unavailable') throw e;
         // 探活接口自身异常/超时：放行，让 TCP 连接自己决定
-        console.log(`[GrainTCP] [proxyip检测] 探活异常，放行继续尝试 | candidate=${candidate} | 错误=${fmtErr(e)}`);
+        warn(`[FuckTCP] [proxyip检测] 探活异常，放行继续尝试 | candidate=${candidate} | 错误=${fmtErr(e)}`);
     } finally {
         clearTimeout(timer);
     }
@@ -371,15 +381,15 @@ const ws = async (req, env) => {
         curW = w;
     };
     const openConn = async (host, port, first, mode = '直连') => {
-        console.log(`[GrainTCP] [${mode}] 开始连接 -> ${host}:${port} | 首包段数=${Array.isArray(first) ? first.length : 1}`);
+        log(`[FuckTCP] [${mode}] 开始连接 -> ${host}:${port} | 首包段数=${Array.isArray(first) ? first.length : 1}`);
         const s = await raceSprout(fetcher, host, port), w = s.writable.getWriter();
         try {
             const xs = Array.isArray(first) ? first : [first];
             for (const x of xs) x?.byteLength && await w.write(x);
-            console.log(`[GrainTCP] [${mode}] 连接成功 -> ${host}:${port} | 已写入=${xs.reduce((n, x) => n + (x?.byteLength || 0), 0)} bytes`);
+            log(`[FuckTCP] [${mode}] 连接成功 -> ${host}:${port} | 已写入=${xs.reduce((n, x) => n + (x?.byteLength || 0), 0)} bytes`);
             return {s, w};
         } catch (e) {
-            console.log(`[GrainTCP] [${mode}] 连接失败 -> ${host}:${port} | 错误=${fmtErr(e)}`);
+            warn(`[FuckTCP] [${mode}] 连接失败 -> ${host}:${port} | 错误=${fmtErr(e)}`);
             try {
                 w.releaseLock();
             } catch {
@@ -398,7 +408,7 @@ const ws = async (req, env) => {
         if (!proxyList) {
             proxyList = await resolveProxyList(proxyIP).catch(() => [[DEF_PROXY_HOST, DEF_PROXY_PORT]]);
         }
-        console.log(`[GrainTCP] [proxyip代理] 准备回退 | 目标=${route.host}:${route.port} | 请求proxyip=${proxyIP || '未指定'} | 候选数=${proxyList.length}`);
+        log(`[FuckTCP] [proxyip代理] 准备回退 | 目标=${route.host}:${route.port} | 请求proxyip=${proxyIP || '未指定'} | 候选数=${proxyList.length}`);
         const startIdx = (proxyCacheHost === ((proxyIP || '').trim() || DEF_PROXY_HOST)) ? proxyCacheIndex : 0;
         const order = [...Array(proxyList.length).keys()];
         if (startIdx > 0 && startIdx < order.length) order.unshift(...order.splice(startIdx, 1));
@@ -410,7 +420,7 @@ const ws = async (req, env) => {
                 setConn(s, w);
                 sealReplay();
                 proxyCacheIndex = i;
-                console.log(`[GrainTCP] [proxyip代理] 已接管链路 | 目标=${route.host}:${route.port} | 出口=${host}:${port}`);
+                log(`[FuckTCP] [proxyip代理] 已接管链路 | 目标=${route.host}:${route.port} | 出口=${host}:${port}`);
                 runPipe(s, false);
                 return;
             } catch (e) {
@@ -422,13 +432,14 @@ const ws = async (req, env) => {
         proxyCacheHost = '';
         proxyCacheIndex = 0;
         // 兜底：直连 DEF_PROXY_HOST 域名，不走探活（对齐 worker.js 返袋兜底逻辑）
-        console.log(`[GrainTCP] [proxyip兜底] 候选全部失败，直连兜底 | ${DEF_PROXY_HOST}:${DEF_PROXY_PORT}`);
+        warn(`[FuckTCP] [proxyip兜底] 候选全部失败，直连兜底 | ${DEF_PROXY_HOST}:${DEF_PROXY_PORT}`);
         try {
             const {s, w} = await openConn(DEF_PROXY_HOST, DEF_PROXY_PORT, route.parts, 'proxyip兜底');
             setConn(s, w);
             sealReplay();
             runPipe(s, false);
         } catch (e) {
+            error(`[FuckTCP] [proxyip兜底] 兜底连接失败 | 目标=${route.host}:${route.port} | 错误=${fmtErr(err || e)}`);
             throw err || e;
         }
     };
@@ -439,8 +450,11 @@ const ws = async (req, env) => {
         }).then(seen => {
             if (closed || id !== pipeID) return;
             if (!seen && canRetry) {
-                console.log(`[GrainTCP] [直连] 无回包，切换到 proxyip 代理 | 目标=${route?.host}:${route?.port}`);
-                return retryProxy().catch(() => wither());
+                warn(`[FuckTCP] [直连] 无回包，切换到 proxyip 代理 | 目标=${route?.host}:${route?.port}`);
+                return retryProxy().catch(e => {
+                    error(`[FuckTCP] [proxyip代理] 回退失败 | 目标=${route?.host}:${route?.port} | 错误=${fmtErr(e)}`);
+                    wither();
+                });
             }
             wither();
         }, () => wither());
@@ -464,6 +478,7 @@ const ws = async (req, env) => {
                     if (!d) break;
                     const r = vls(d);
                     if (!r) {
+                        warn('[FuckTCP] 首包解析失败或ID不匹配，连接已关闭');
                         wither();
                         return;
                     }
@@ -471,14 +486,14 @@ const ws = async (req, env) => {
                     const host = addr(r.addrType, r.targetAddrBytes), port = r.port, payload = d.subarray(r.dataOffset), [first] = uq.bundle(payload);
                     const seed = (first || payload).slice();
                     route = {host, port, parts: [seed], bytes: seed.byteLength, ack: 0};
-                    console.log(`[GrainTCP] 解析目标成功 | 目标=${host}:${port} | 首包=${seed.byteLength} bytes | 直连优先=${!proxyIP}`);
+                    log(`[FuckTCP] 解析目标成功 | 目标=${host}:${port} | 首包=${seed.byteLength} bytes | 直连优先=${!proxyIP}`);
                     try {
                         const {s, w} = await openConn(host, port, route.parts, '直连');
                         setConn(s, w);
-                        console.log(`[GrainTCP] [直连] 已接入链路 | 目标=${host}:${port}`);
+                        log(`[FuckTCP] [直连] 已接入链路 | 目标=${host}:${port}`);
                         runPipe(s, true);
                     } catch (e) {
-                        console.log(`[GrainTCP] [直连] 建链失败，切换到 proxyip 代理 | 目标=${host}:${port} | 错误=${fmtErr(e)}`);
+                        warn(`[FuckTCP] [直连] 建链失败，切换到 proxyip 代理 | 目标=${host}:${port} | 错误=${fmtErr(e)}`);
                         await retryProxy();
                     }
                     continue;
@@ -488,7 +503,8 @@ const ws = async (req, env) => {
                 keepReplay(d);
                 await curW.write(d);
             }
-        } catch {
+        } catch (e) {
+            error(`[FuckTCP] [转发] 上行处理异常 | 错误=${fmtErr(e)}`);
             wither();
         } finally {
             busy = false;

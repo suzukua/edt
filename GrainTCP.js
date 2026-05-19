@@ -5,7 +5,8 @@ const CFG = {
     dnTail: 512,
     dnMs: 0,
     upPack: 16 * 1024,
-    upQMax: 256 * 1024,
+    upQMax: 16 * 1024 * 1024,
+    upItemsMax: 4096,
     maxED: 8 * 1024,
     concur: 4
 };
@@ -320,7 +321,7 @@ const ws = async (req, env) => {
     const ed = edStr && edStr.length <= CFG.maxED * 4 / 3 + 4 ? /** @type {*} */ (Uint8Array).fromBase64(edStr, {alphabet: 'base64url'}) : null;
     let curW = null, sock = null, closed = false, busy = false, pipeID = 0, retried = false, route = null;
     let proxyList = null;
-    const uq = mkQ(CFG.upPack, CFG.upQMax, CFG.upQMax >> 8);
+    const uq = mkQ(CFG.upPack, CFG.upQMax, CFG.upItemsMax);
     const wither = () => {
         if (closed) return;
         closed = true;

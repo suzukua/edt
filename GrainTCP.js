@@ -168,9 +168,8 @@ const checkProxy = async (host, port) => {
         }
         log(`[FuckTCP] [proxyip检测] 可用 | candidate=${result.candidate || candidate} | 地区=${result.exit_country || '-'}-${result.exit_city || '-'}`);
     } catch (e) {
-        if (e.message === 'proxyip unavailable') throw e;
-        // 探活接口自身异常/超时：放行，让 TCP 连接自己决定
-        warn(`[FuckTCP] [proxyip检测] 探活异常，放行继续尝试 | candidate=${candidate} | 错误=${fmtErr(e)}`);
+        warn(`[FuckTCP] [proxyip检测] 探活异常 | prxip：${candidate} | 错误：${fmtErr(e)}`);
+        throw e;
     } finally {
         clearTimeout(timer);
     }

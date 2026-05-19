@@ -1269,23 +1269,62 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
 }
 
 async function 生成随机IP(request, count = 16, 指定端口 = -1) {
+    const clientIp = request.headers.get("CF-Connecting-IP") || '';
+    const version = 判断IP版本(clientIp);
+    const totalCount = Math.max(0, Number.parseInt(count, 10) || 0);
     const ISP配置 = {
-        '9808': { file: 'cmcc', name: '移动', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cmcc.txt` },
-        '4837': { file: 'cu', name: '联通1', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
-        '17623': { file: 'cu', name: '联通2', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
-        '17816': { file: 'cu', name: '联通3', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
-        '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/master/ct.txt` },
+        'cmcc': { name: '移动', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cmcc.txt` },
+        'cu': { name: '联通1', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
+        'ct': { name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/master/ct.txt` },
         // '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/ct.txt` },
     };
-    let url = new URL(request.url)
-    const asn = url.searchParams.get('asn') || request.cf.asn, isp = ISP配置[asn];
+    const 运营商名称映射 = {
+        cmcc: '移动优选',
+        cu: '联通优选',
+        ct: '电信优选',
+        cf: '官方优选',
+    };
+    const url = new URL(request.url);
+    const 查询参数运营商 = String(url.searchParams.get('asOrg') || '').toLowerCase();
+    const 运营商文件标识 = ['ct', 'cu', 'cmcc', 'cf'].includes(查询参数运营商) ? 查询参数运营商 : 识别运营商(request);
+    const isp = ISP配置[运营商文件标识];
+    console.log(`请求IP: ${clientIp} 识别运营商: ${运营商文件标识 || '未知'} 查询参数运营商: ${查询参数运营商 || '无'}`);
     const cidr_url = isp ? isp.url : 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
-    const cfname = isp?.name || 'CF官方优选';
+    const cfname = 运营商名称映射[运营商文件标识] || 'CF官方优选';
     const cfport = [443, 2053, 2083, 2087, 2096, 8443];
-    let cidrList = [];
-    try { const res = await fetch(cidr_url); cidrList = res.ok ? await 整理成数组(await res.text()) : ['104.16.0.0/13']; } catch { cidrList = ['104.16.0.0/13']; }
+    const 默认IPv4CIDR = ['104.16.0.0/13'];
+    const 默认IPv6CIDR = ['2606:4700::/32'];
+    const 需要混合生成 = url.searchParams.has("ipv6") ? true : version === 6;
 
-    const generateRandomIPFromCIDR = (cidr) => {
+    const 过滤指定版本CIDR = (cidrList, ipVersion) => cidrList.filter(cidr => {
+        const 原始CIDR = String(cidr).trim();
+        if (!原始CIDR || !原始CIDR.includes('/')) return false;
+        if (判断IP版本(原始CIDR) !== ipVersion) return false;
+        const prefixLength = 原始CIDR.slice(原始CIDR.lastIndexOf('/') + 1).trim();
+        if (!/^\d+$/.test(prefixLength)) return false;
+        const prefix = Number.parseInt(prefixLength, 10);
+        return ipVersion === 4 ? prefix <= 32 : prefix <= 128;
+    });
+
+    const 获取CIDR原始列表 = async (cidr_url) => {
+        try {
+            const res = await fetch(cidr_url);
+            if (!res.ok) return [];
+            return await 整理成数组(await res.text());
+        } catch {
+            return [];
+        }
+    };
+
+    const cidrRawList = await 获取CIDR原始列表(cidr_url);
+    console.log(cidr_url, '获取到的CIDR数量:', cidrRawList.length, " 需要混合生成: " + 需要混合生成);
+    const ipv4CidrList = 过滤指定版本CIDR(cidrRawList, 4);
+    const ipv6CidrList = 需要混合生成 ? 过滤指定版本CIDR(cidrRawList, 6) : [];
+    const 可用IPv4CIDR = ipv4CidrList.length > 0 ? ipv4CidrList : 默认IPv4CIDR;
+    const 可用IPv6CIDR = ipv6CidrList.length > 0 ? ipv6CidrList : 默认IPv6CIDR;
+    console.log(ipv4CidrList.length > 0 ? `使用${可用IPv4CIDR.length}条可用IPv4 CIDR` : '未找到可用IPv4 CIDR，使用默认CIDR');
+    console.log(ipv6CidrList.length > 0 ? `使用${可用IPv6CIDR.length}条可用IPv6 CIDR` : '未找到可用IPv6 CIDR，使用默认CIDR');
+    const generateRandomIPv4FromCIDR = (cidr) => {
         const [baseIP, prefixLength] = cidr.split('/'), prefix = parseInt(prefixLength), hostBits = 32 - prefix;
         const ipInt = baseIP.split('.').reduce((a, p, i) => a | (parseInt(p) << (24 - i * 8)), 0);
         const randomOffset = Math.floor(Math.random() * Math.pow(2, hostBits));
@@ -1293,11 +1332,172 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
         return [(randomIP >>> 24) & 0xFF, (randomIP >>> 16) & 0xFF, (randomIP >>> 8) & 0xFF, randomIP & 0xFF].join('.');
     };
 
-    const randomIPs = Array.from({ length: count }, () => {
-        const ip = generateRandomIPFromCIDR(cidrList[Math.floor(Math.random() * cidrList.length)]);
+    const 生成随机BigInt = (bits) => {
+        if (bits <= 0) return 0n;
+        const bytes = Math.ceil(bits / 8);
+        const randomBytes = new Uint8Array(bytes);
+        crypto.getRandomValues(randomBytes);
+        const excessBits = bytes * 8 - bits;
+        if (excessBits > 0) randomBytes[0] &= 0xFF >>> excessBits;
+        return randomBytes.reduce((acc, byte) => (acc << 8n) | BigInt(byte), 0n);
+    };
+
+    const IPv6转BigInt = (ip) => {
+        let 标准IP = ip.replace(/^\[|\]$/g, '').toLowerCase();
+        if (标准IP.includes('.')) {
+            const 最后一个冒号 = 标准IP.lastIndexOf(':');
+            const ipv4Part = 标准IP.slice(最后一个冒号 + 1).split('.').map(Number);
+            if (ipv4Part.length !== 4 || ipv4Part.some(part => Number.isNaN(part) || part < 0 || part > 255)) throw new Error(`无效IPv4映射地址: ${ip}`);
+            标准IP = `${标准IP.slice(0, 最后一个冒号)}:${((ipv4Part[0] << 8) | ipv4Part[1]).toString(16)}:${((ipv4Part[2] << 8) | ipv4Part[3]).toString(16)}`;
+        }
+        const 包含压缩写法 = 标准IP.includes('::');
+        const [head = '', tail = ''] = 包含压缩写法 ? 标准IP.split('::') : [标准IP, ''];
+        const headParts = head ? head.split(':').filter(Boolean) : [];
+        const tailParts = 包含压缩写法 && tail ? tail.split(':').filter(Boolean) : [];
+        const missingGroups = 8 - (headParts.length + tailParts.length);
+        const groups = 包含压缩写法 ? [...headParts, ...Array(Math.max(missingGroups, 0)).fill('0'), ...tailParts] : headParts;
+        if (groups.length !== 8) throw new Error(`无效IPv6地址: ${ip}`);
+        return groups.reduce((acc, group) => (acc << 16n) | BigInt(parseInt(group || '0', 16)), 0n);
+    };
+
+    const BigInt转IPv6 = (value) => Array.from({ length: 8 }, (_, index) => {
+        const shift = 112n - BigInt(index * 16);
+        return ((value >> shift) & 0xFFFFn).toString(16);
+    }).join(':');
+
+    const generateRandomIPv6FromCIDR = (cidr) => {
+        const [baseIP, prefixLength] = cidr.split('/');
+        const prefix = parseInt(prefixLength, 10);
+        const hostBits = 128 - prefix;
+        const ipInt = IPv6转BigInt(baseIP);
+        const hostMask = hostBits > 0 ? (1n << BigInt(hostBits)) - 1n : 0n;
+        const networkIP = ipInt & ~hostMask;
+        return `[${BigInt转IPv6(networkIP + 生成随机BigInt(hostBits))}]`;
+    };
+
+    const 生成地址列表 = (数量, cidrList, 生成IP) => Array.from({ length: 数量 }, () => {
+        const ip = 生成IP(cidrList[Math.floor(Math.random() * cidrList.length)]);
         return `${ip}:${指定端口 === -1 ? cfport[Math.floor(Math.random() * cfport.length)] : 指定端口}#${cfname}`;
     });
+
+    const 打乱数组 = (arr) => {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    };
+
+    const ipv4Count = 需要混合生成 ? Math.ceil(totalCount / 2) : totalCount;
+    const ipv6Count = 需要混合生成 ? Math.floor(totalCount / 2) : 0;
+    const randomIPs = 打乱数组([
+        ...生成地址列表(ipv4Count, 可用IPv4CIDR, generateRandomIPv4FromCIDR),
+        ...生成地址列表(ipv6Count, 可用IPv6CIDR, generateRandomIPv6FromCIDR),
+    ]);
     return [randomIPs, randomIPs.join('\n')];
+}
+
+
+function 判断IP版本(ip) {
+    if (!ip) return 0;
+    let 原始IP = String(ip).trim();
+    // 处理 CIDR
+    let maskNum = null;
+    if (原始IP.includes('/')) {
+        const parts = 原始IP.split('/');
+        if (parts.length !== 2) return 0;
+        原始IP = parts[0];
+        maskNum = parts[1];
+    }
+    // 去掉 []
+    原始IP = 原始IP.replace(/^\[|\]$/g, '');
+    // 处理 zone id
+    if (原始IP.includes('%')) {
+        if (!/%[0-9a-zA-Z_.-]+$/.test(原始IP)) return 0;
+        原始IP = 原始IP.replace(/%[0-9a-zA-Z_.-]+$/, '');
+    }
+    if (!原始IP) return 0;
+    // IPv4
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(原始IP)) {
+        const parts = 原始IP.split('.');
+        const valid = parts.every(part => {
+            if (!/^(0|[1-9]\d*)$/.test(part)) return false;
+            const num = Number(part);
+            return num >= 0 && num <= 255;
+        });
+        if (!valid) return 0;
+        // 检查 IPv4 CIDR 掩码
+        if (maskNum !== null) {
+            const m = Number(maskNum);
+            if (!Number.isInteger(m) || m < 0 || m > 32) return 0;
+        }
+        return 4;
+    }
+    let 标准IP = 原始IP.toLowerCase();
+    // IPv4-mapped IPv6
+    if (标准IP.includes('.')) {
+        const 最后一个冒号 = 标准IP.lastIndexOf(':');
+        if (最后一个冒号 === -1) return 0;
+        const ipv4Part = 标准IP.slice(最后一个冒号 + 1);
+        if (判断IP版本(ipv4Part) !== 4) return 0;
+        const [a, b, c, d] = ipv4Part.split('.').map(Number);
+        标准IP =
+            `${标准IP.slice(0, 最后一个冒号)}:` +
+            `${((a << 8) | b).toString(16)}:` +
+            `${((c << 8) | d).toString(16)}`;
+    }
+    if (!/^[0-9a-f:]+$/i.test(标准IP)) return 0;
+    const 双冒号数量 = (标准IP.match(/::/g) || []).length;
+    if (双冒号数量 > 1) return 0;
+    const 包含压缩写法 = 标准IP.includes('::');
+    const [head = '', tail = ''] = 包含压缩写法 ? 标准IP.split('::') : [标准IP, ''];
+    const headParts = head ? head.split(':') : [];
+    const tailParts = tail ? tail.split(':') : [];
+    const hexGroup有效 = g => /^[0-9a-f]{1,4}$/i.test(g);
+    if (headParts.some(g => !hexGroup有效(g))) return 0;
+    if (tailParts.some(g => !hexGroup有效(g))) return 0;
+    const groupCount = headParts.length + tailParts.length;
+    if (包含压缩写法) {
+        if (groupCount >= 8) return 0;
+    } else {
+        if (groupCount !== 8) return 0;
+    }
+    // 检查 IPv6 CIDR 掩码
+    if (maskNum !== null) {
+        const m = Number(maskNum);
+        if (!Number.isInteger(m) || m < 0 || m > 128) return 0;
+    }
+    return 6;
+}
+
+function 识别运营商(request) {
+    const cf = request?.cf;
+    const ASN运营商映射 = {
+        '4134': 'ct',
+        '4809': 'ct',
+        '4811': 'ct',
+        '4812': 'ct',
+        '4815': 'ct',
+        '4837': 'cu',
+        '4814': 'cu',
+        '9929': 'cu',
+        '17623': 'cu',
+        '17816': 'cu',
+        '9808': 'cmcc',
+        '24400': 'cmcc',
+        '56040': 'cmcc',
+        '56041': 'cmcc',
+        '56044': 'cmcc',
+    };
+    const 运营商关键词映射 = [
+        { code: 'ct', pattern: /chinanet|chinatelecom|china telecom|cn2|shtel/ },
+        { code: 'cmcc', pattern: /cmi|cmnet|chinamobile|china mobile|cmcc|mobile communications/ },
+        { code: 'cu', pattern: /china169|china unicom|chinaunicom|cucc|cncgroup|cuii|netcom/ },
+    ];
+    if (String(cf?.country || '').toLowerCase() !== 'cn') return 'cf';
+    const 组织名称 = String(cf?.asOrganization || '').toLowerCase();
+    const 命中运营商 = 运营商关键词映射.find(({ pattern }) => pattern.test(组织名称))?.code;
+    return 命中运营商 || ASN运营商映射[String(cf?.asn || '')] || 'cf';
 }
 
 async function 整理成数组(内容) {

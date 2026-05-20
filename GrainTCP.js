@@ -18,7 +18,7 @@ const log = (...args) => {
     CFG.log && console.log(...args);
 };
 const warn = (...args) => {
-    console.warn(...args);
+    CFG.log && console.warn(...args);
 };
 const error = (...args) => {
     console.error(...args);

@@ -665,7 +665,7 @@ async function validPxyIp1(pxyip, port) {
         })
         const result = await response.json();
         if (result.ok) {
-            console.log(`[返袋IP验证结果] ${result.candidate} - 地区：${result.exit_country}--${result.exit_city}, 可用性: ${result.ok}`);
+            console.log(`[返袋IP验证结果] ${result.candidate} , 可用性: ${result.ok}`);
             return;
         } else {
             console.log(`[返袋IP验证结果] ${pxyip}${port ? ":" + port : ""} - 不可用！`);

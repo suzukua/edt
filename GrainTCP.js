@@ -166,7 +166,7 @@ const checkProxy = async (host, port) => {
             warn(`[FuckTCP] [proxyip检测] 不可用 | candidate=${candidate}`);
             throw new Error('proxyip unavailable');
         }
-        log(`[FuckTCP] [proxyip检测] 可用 | candidate=${result.candidate || candidate} | 地区=${result.exit_country || '-'}-${result.exit_city || '-'}`);
+        log(`[FuckTCP] [proxyip检测] 可用 | candidate=${result.candidate || candidate} `);
     } catch (e) {
         warn(`[FuckTCP] [proxyip检测] 探活异常 | prxip：${candidate} | 错误：${fmtErr(e)}`);
         throw e;

@@ -492,7 +492,9 @@ const ws = async (req, env) => {
         const startIdx = (proxyCacheHost === ((proxyIP || '').trim() || DEF_PROXY_HOST)) ? proxyCacheIndex : 0;
         const order = [...Array(proxyList.length).keys()];
         if (startIdx > 0 && startIdx < order.length) order.unshift(...order.splice(startIdx, 1));
+        let retryCount = 0;
         for (const i of order) {
+            retryCount++;
             const [host, port] = proxyList[i];
             try {
                 await checkProxy(host, port);
@@ -505,6 +507,10 @@ const ws = async (req, env) => {
                 return;
             } catch (e) {
                 err = e;
+            }
+            if (retryCount >= 3) {
+                log(`[FuckTCP] [proxyip代理] 已尝试 ${retryCount} 个候选，全部失败，准备兜底 | 目标=${route.host}:${route.port}`);
+                break;
             }
         }
         // 全部候选失败：清空解析缓存，下次请求重新 DoH（对齐 worker.js 缓存返袋解析数组 = null）

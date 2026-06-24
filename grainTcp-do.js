@@ -219,6 +219,35 @@ const checkProxy = async (host, port) => {
         clearTimeout(timer);
     }
 };
+
+async function validPxyIp(pxyip, port) {
+    console.log(`[返袋IP验证] ${pxyip}${port ? ":" + port : ""}`);
+    const testApi = `${atob("aHR0cHM6Ly9hcGkuMDkwMjI3Lnh5ei9jaGVjaw==")}?proxyip=${pxyip}${port ? ":" + port : ""}`
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 1000)
+    try {
+        const response = await fetch(testApi, {
+            signal: controller.signal,
+            cf: {
+                cacheEverything: true,
+                cacheKey: testApi,
+                cacheTtlByStatus: { "200-299": 60, "400-599": 0 }
+            }
+        })
+        const result = await response.json();
+        if (result.success) {
+            console.log(`[返袋IP验证结果] ${result.proxyIP}:${result.portRemote}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
+            return;
+        } else {
+            console.log(`[返袋IP验证结果] ${pxyip}${port ? ":" + port : ""} - 不可用！`);
+            throw new Error('validPxyIp检查到返袋IP不可用');
+        }
+    } catch (e) {
+        console.log(`[返袋IP验证服务发生异常] ${e.message}`);
+        throw e
+    }
+}
+
 const vls = c => {
     if (c.length < 24 || !matchID(c)) return null;
     let o = 19 + c[17];

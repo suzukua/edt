@@ -497,7 +497,7 @@ const ws = async (req, env) => {
             retryCount++;
             const [host, port] = proxyList[i];
             try {
-                await checkProxy(host, port);
+                // await checkProxy(host, port);
                 const {s, w} = await openConn(host, port, route.parts, `proxyip代理 ${i + 1}/${proxyList.length}`);
                 setConn(s, w);
                 sealReplay();

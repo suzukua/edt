@@ -328,7 +328,7 @@ export default {
                         const clientIp = request.headers.get("CF-Connecting-IP") || '';
                         const needIpv6 = url.searchParams.has("ipv6") || 判断IP版本(clientIp) === 6;
                         console.log(`clientIp: ${clientIp}, needIpv6: ${needIpv6}`);
-                        const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed' + (needIpv6 ? '&ipv6=1' : '') + '&asOrg=' + 识别运营商(request) + '&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
+                        const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed' + (needIpv6 ? '&ipv6=1' : '&ipv6=0') + '&asOrg=' + 识别运营商(request) + '&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
                         console.log(`订阅转换URL: ${订阅转换URL}`)
                         try {
                             const response = await fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel(https://github.com/cmliu/edge' + 'tunnel)' } });
@@ -1296,7 +1296,10 @@ async function 生成随机IP(request, count = 16, 指定端口 = -1) {
     const cfport = [443, 2053, 2083, 2087, 2096, 8443];
     const 默认IPv4CIDR = ['104.16.0.0/13'];
     const 默认IPv6CIDR = ['2606:4700::/32'];
-    const 需要混合生成 = url.searchParams.has("ipv6") || 判断IP版本(request.headers.get("CF-Connecting-IP") || '') === 6;
+    console.log(url.toString())
+    // const 需要混合生成 = url.searchParams.has("ipv6") || 判断IP版本(request.headers.get("CF-Connecting-IP") || '') === 6;
+    const 需要混合生成 = url.searchParams.get("ipv6") != '0' || (!url.searchParams.has("ipv6") && 判断IP版本(request.headers.get("CF-Connecting-IP") || '') == 6);
+    console.log(`需要混合生成: ${需要混合生成} |||||| `, url.searchParams.get("ipv6"), url.searchParams.has("ipv6"), 判断IP版本(request.headers.get("CF-Connecting-IP") || ''))
 
     const 过滤指定版本CIDR = (cidrList, ipVersion) => cidrList.filter(cidr => {
         const 原始CIDR = String(cidr).trim();

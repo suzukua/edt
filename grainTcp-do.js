@@ -2,12 +2,12 @@ import {DurableObject} from 'cloudflare:workers';
 
 const CFG = {
     id: '',
-    log: true,
+    log: false,
     chunk: 64 * 1024,
     dnPack: 32 * 1024,
     dnTail: 512,
-    dnMs: 0,
-    upPack: 16 * 1024,
+    dnQr: 4,
+    upPack: 20 * 1024,
     upQMax: 16 * 1024 * 1024,
     upItemsMax: 4096,
     maxED: 8 * 1024,
@@ -103,8 +103,8 @@ const matchID = c => {
     for (let i = 0; i < 16; i++) if (c[i + 1] !== idB[i]) return false;
     return true;
 };
-const addr = (t, b) => t === 1 ? `${b[0]}.${b[1]}.${b[2]}.${b[3]}` : t === 3 ? dec.decode(b) : `[${Array.from({length: 8}, (_, i) => ((b[i * 2] << 8) | b[i * 2 + 1]).toString(16)).join(':')}]`;
-const sprout = (f, h, p, s = f.connect({hostname: h, port: p})) => s.opened.then(() => s);
+const addr = (t, b) => t === 1 ? `${b[0]}.${b[1]}.${b[2]}.${b[3]}` : t === 3 ? dec.decode(b) : `[${Array.from({ length: 8 }, (_, i) => ((b[i * 2] << 8) | b[i * 2 + 1]).toString(16)).join(':')}]`;
+const sprout = (f, h, p, s = f.connect({ hostname: h, port: p })) => s.opened.then(() => s);
 const raceSprout = (f, h, p) => {
     if (!f?.connect) return Promise.reject(new Error('connect unavailable'));
     if (CFG.concur <= 1) return sprout(f, h, p);
@@ -119,7 +119,7 @@ const parseAddr = (b, o, t) => {
     const l = t === 3 ? b[o++] : t === 1 ? 4 : t === 4 ? 16 : null;
     if (l === null) return null;
     const n = o + l;
-    return n > b.length ? null : {targetAddrBytes: b.subarray(o, n), dataOffset: n};
+    return n > b.length ? null : { targetAddrBytes: b.subarray(o, n), dataOffset: n };
 };
 const pick = s => {
     const xs = s?.split(/[\s,]+/).map(x => x.trim()).filter(Boolean);
@@ -150,7 +150,7 @@ const isIpLiteral = s => isIPv4(s) || isIPv6(s);
 const dohQuery = async (host, type) => {
     try {
         const resp = await fetch(`https://1.1.1.1/dns-query?name=${encodeURIComponent(host)}&type=${type}`, {
-            headers: {'Accept': 'application/dns-json'}
+            headers: { 'Accept': 'application/dns-json' }
         });
         if (!resp.ok) return [];
         const data = await resp.json();
@@ -203,7 +203,7 @@ const checkProxy = async (host, port) => {
             cf: {
                 cacheEverything: true,
                 cacheKey: testApi,
-                cacheTtlByStatus: {'200-299': 60, '400-599': 0}
+                cacheTtlByStatus: { '200-299': 60, '400-599': 0 }
             }
         });
         const result = await response.json();
@@ -219,35 +219,6 @@ const checkProxy = async (host, port) => {
         clearTimeout(timer);
     }
 };
-
-async function validPxyIp(pxyip, port) {
-    console.log(`[返袋IP验证] ${pxyip}${port ? ":" + port : ""}`);
-    const testApi = `${atob("aHR0cHM6Ly9hcGkuMDkwMjI3Lnh5ei9jaGVjaw==")}?proxyip=${pxyip}${port ? ":" + port : ""}`
-    const controller = new AbortController()
-    setTimeout(() => controller.abort(), 1000)
-    try {
-        const response = await fetch(testApi, {
-            signal: controller.signal,
-            cf: {
-                cacheEverything: true,
-                cacheKey: testApi,
-                cacheTtlByStatus: { "200-299": 60, "400-599": 0 }
-            }
-        })
-        const result = await response.json();
-        if (result.success) {
-            console.log(`[返袋IP验证结果] ${result.proxyIP}:${result.portRemote}, 可用性: ${result.success}, 响应时间: ${result.responseTime}ms`);
-            return;
-        } else {
-            console.log(`[返袋IP验证结果] ${pxyip}${port ? ":" + port : ""} - 不可用！`);
-            throw new Error('validPxyIp检查到返袋IP不可用');
-        }
-    } catch (e) {
-        console.log(`[返袋IP验证服务发生异常] ${e.message}`);
-        throw e
-    }
-}
-
 const vls = c => {
     if (c.length < 24 || !matchID(c)) return null;
     let o = 19 + c[17];
@@ -255,127 +226,120 @@ const vls = c => {
     let t = c[o + 2];
     if (t !== 1) t += 1;
     const a = parseAddr(c, o + 3, t);
-    return a ? {addrType: t, ...a, port: p} : null;
+    return a ? { addrType: t, ...a, port: p } : null;
 };
-const mkQ = (cap, qCap = cap, itemsMax = Math.max(1, qCap >> 8)) => {
-    let q = [], h = 0, qB = 0, buf = null;
+const mkK = (cap, cpy = 0) => {
+    let q = [], h = 0, b = 0, buf = null;
+    const e = () => h >= q.length;
     const trim = () => {
-        h > 32 && h * 2 >= q.length && (q = q.slice(h), h = 0);
+        if (h > 32 && h * 2 >= q.length) {
+            q = q.slice(h);
+            h = 0;
+        }
+    };
+    const clear = () => {
+        q = [];
+        h = 0;
+        b = 0;
     };
     const take = () => {
-        if (h >= q.length) return null;
+        if (e()) return null;
         const d = q[h];
         q[h++] = undefined;
-        qB -= d.byteLength;
+        b -= d.byteLength;
         trim();
         return d;
     };
-    return {
-        get bytes() {
-            return qB;
-        }, get size() {
-            return q.length - h;
-        }, get empty() {
-            return h >= q.length;
-        }, clear() {
-            q = [];
-            h = 0;
-            qB = 0;
-        },
-        sow(d) {
-            const n = d?.byteLength || 0;
-            if (!n) return 1;
-            if (qB + n > qCap || q.length - h >= itemsMax) return 0;
-            q.push(d);
-            qB += n;
-            return 1;
-        },
-        bundle(d) {
-            d ||= take();
-            if (!d || h >= q.length || d.byteLength >= cap) return [d, 0];
-            let n = d.byteLength, e = h;
-            while (e < q.length) {
-                const x = q[e], nn = n + x.byteLength;
-                if (nn > cap) break;
-                n = nn;
-                e++;
-            }
-            if (e === h) return [d, 0];
-            const out = buf ||= new Uint8Array(cap);
-            out.set(d);
-            for (let o = d.byteLength; h < e;) {
-                const x = q[h];
-                q[h++] = undefined;
-                qB -= x.byteLength;
-                out.set(x, o);
-                o += x.byteLength;
-            }
-            trim();
-            return [out.subarray(0, n), 1];
-        }
+    const sow = d => {
+        const n = d?.byteLength || 0;
+        if (!n) return 1;
+        q.push(d);
+        b += n;
+        return 1;
     };
+    const pack = d => {
+        d ||= take();
+        if (!d || e()) return [d, 0];
+        let n = d.byteLength, j = h;
+        while (j < q.length) {
+            const x = q[j], nn = n + x.byteLength;
+            if (nn > cap) break;
+            n = nn;
+            j++;
+        }
+        if (j === h) return [d, 0];
+        const out = buf ||= new Uint8Array(cap);
+        out.set(d);
+        for (let o = d.byteLength; h < j;) {
+            const x = q[h];
+            q[h++] = undefined;
+            b -= x.byteLength;
+            out.set(x, o);
+            o += x.byteLength;
+        }
+        trim();
+        const u = out.subarray(0, n);
+        return [cpy ? u.slice() : u, 1];
+    };
+    return { e, get b() { return b; }, clear, take, sow, pack };
+};
+const mkQ = cap => {
+    const k = mkK(cap);
+    return { get empty() { return k.e(); }, clear: k.clear, sow: k.sow, bundle: d => k.pack(d) };
 };
 const mkDn = w => {
-    const cap = CFG.dnPack, tail = CFG.dnTail, low = Math.max(4096, tail << 3);
-    let pb = new Uint8Array(cap), p = 0, tp = 0, mq = 0, gen = 0, qk = 0, qr = 0;
+    const cap = CFG.dnPack, tail = CFG.dnTail, low = Math.max(4096, tail * 12), k = mkK(cap, 1);
+    let tp = 0, gen = 0, qk = 0, qr = 0;
     const reap = () => {
         tp && clearTimeout(tp);
         tp = 0;
-        mq = 0;
-        if (!p) return;
-        w.send(pb.subarray(0, p).slice());
-        pb = new Uint8Array(cap);
-        p = 0;
         qr = 0;
+        for (;;) {
+            const [u] = k.pack();
+            if (!u) break;
+            w.send(u);
+        }
     };
     const ripen = () => {
-        if (tp || mq) return;
-        mq = 1;
-        qk = gen;
-        queueMicrotask(() => {
-            mq = 0;
-            if (!p || tp) return;
-            if (cap - p < tail) return reap();
-            tp = setTimeout(() => {
-                tp = 0;
-                if (!p) return;
-                if (cap - p < tail) return reap();
-                if (qr < 2 && (gen !== qk || p < low)) {
-                    qr++;
-                    qk = gen;
-                    return ripen();
-                }
-                reap();
-            }, Math.max(CFG.dnMs, 1));
-        });
+        if (k.e() || tp) return;
+        if (k.b >= cap || cap - k.b < tail) return reap();
+        tp = setTimeout(() => {
+            tp = 0;
+            if (k.e()) return;
+            if (k.b >= cap || cap - k.b < tail) return reap();
+            if (qr < CFG.dnQr && (gen !== qk || k.b < low)) {
+                qr++;
+                qk = gen;
+                return ripen();
+            }
+            reap();
+        }, 1);
     };
     return {
         send(u) {
             let o = 0, n = u?.byteLength || 0;
             if (!n) return;
             while (o < n) {
-                if (!p && n - o >= cap) {
-                    const m = Math.min(cap, n - o);
-                    w.send(o || m !== n ? u.subarray(o, o + m) : u);
-                    o += m;
+                const m = Math.min(cap - k.b, n - o);
+                if (!m) {
+                    reap();
                     continue;
                 }
-                const m = Math.min(cap - p, n - o);
-                pb.set(u.subarray(o, o + m), p);
-                p += m;
-                o += m;
+                k.sow(o || m !== n ? u.subarray(o, o + m) : u);
                 gen++;
-                if (p === cap || cap - p < tail) reap(); else ripen();
+                o += m;
+                if (k.b >= cap || cap - k.b < tail) reap(); else ripen();
             }
-        }, reap
+        },
+        reap
     };
 };
 const mill = async (rd, w, onFirst) => {
-    const r = rd.getReader({mode: 'byob'}), tx = mkDn(w);
+    const r = rd.getReader({ mode: 'byob' }), tx = mkDn(w);
     let buf = new ArrayBuffer(CFG.chunk), seen = 0;
     try {
-        for (; ;) {
-            const {done, value: v} = await r.read(new Uint8Array(buf, 0, CFG.chunk));
+        for (;;) {
+            const { done, value: v } = await r.read(new Uint8Array(buf, 0, CFG.chunk));
             if (done) break;
             if (!v?.byteLength) continue;
             if (!seen) {
@@ -385,7 +349,14 @@ const mill = async (rd, w, onFirst) => {
                 } catch {
                 }
             }
-            if (v.byteLength >= CFG.dnPack) tx.reap(), w.send(v), buf = new ArrayBuffer(CFG.chunk); else tx.send(v.slice()), buf = v.buffer;
+            if (v.byteLength >= (CFG.chunk >> 1)) {
+                tx.reap();
+                w.send(v);
+                buf = new ArrayBuffer(CFG.chunk);
+            } else {
+                tx.send(v.slice());
+                buf = v.buffer;
+            }
         }
         tx.reap();
     } catch {
@@ -403,15 +374,15 @@ const mill = async (rd, w, onFirst) => {
 };
 const ws = async (req, env) => {
     const [client, server] = Object.values(new WebSocketPair());
-    server.accept({allowHalfOpen: true});
+    server.accept({ allowHalfOpen: true });
     server.binaryType = 'arraybuffer';
     const fetcher = req.fetcher;
     const proxyIP = proxyOf(req, env);
     const edStr = req.headers.get('sec-websocket-protocol');
-    const ed = edStr && edStr.length <= CFG.maxED * 4 / 3 + 4 ? /** @type {*} */ (Uint8Array).fromBase64(edStr, {alphabet: 'base64url'}) : null;
+    const ed = edStr && edStr.length <= CFG.maxED * 4 / 3 + 4 ? /** @type {*} */ (Uint8Array).fromBase64(edStr, { alphabet: 'base64url' }) : null;
     let curW = null, sock = null, closed = false, busy = false, pipeID = 0, retried = false, route = null;
     let proxyList = null;
-    const uq = mkQ(CFG.upPack, CFG.upQMax, CFG.upItemsMax);
+    const uq = mkQ(CFG.upPack);
     const wither = () => {
         if (closed) return;
         closed = true;
@@ -467,7 +438,7 @@ const ws = async (req, env) => {
             const xs = Array.isArray(first) ? first : [first];
             for (const x of xs) x?.byteLength && await w.write(x);
             log(`[FuckTCP] [${mode}] 连接成功 -> ${host}:${port} | 已写入=${xs.reduce((n, x) => n + (x?.byteLength || 0), 0)} bytes`);
-            return {s, w};
+            return { s, w };
         } catch (e) {
             warn(`[FuckTCP] [${mode}] 连接失败 -> ${host}:${port} | 错误=${fmtErr(e)}`);
             try {
@@ -489,16 +460,14 @@ const ws = async (req, env) => {
             proxyList = await resolveProxyList(proxyIP).catch(() => [[DEF_PROXY_HOST, DEF_PROXY_PORT]]);
         }
         log(`[FuckTCP] [proxyip代理] 准备回退 | 目标=${route.host}:${route.port} | 请求proxyip=${proxyIP || '未指定'} | 候选数=${proxyList.length}`);
-        const startIdx = (proxyCacheHost === ((proxyIP || '').trim() || DEF_PROXY_HOST)) ? proxyCacheIndex : 0;
+        const startIdx = proxyCacheHost === ((proxyIP || '').trim() || DEF_PROXY_HOST) ? proxyCacheIndex : 0;
         const order = [...Array(proxyList.length).keys()];
         if (startIdx > 0 && startIdx < order.length) order.unshift(...order.splice(startIdx, 1));
-        let retryCount = 0;
         for (const i of order) {
-            retryCount++;
             const [host, port] = proxyList[i];
             try {
-                // await checkProxy(host, port);
-                const {s, w} = await openConn(host, port, route.parts, `proxyip代理 ${i + 1}/${proxyList.length}`);
+                await checkProxy(host, port);
+                const { s, w } = await openConn(host, port, route.parts, `proxyip代理 ${i + 1}/${proxyList.length}`);
                 setConn(s, w);
                 sealReplay();
                 proxyCacheIndex = i;
@@ -508,19 +477,13 @@ const ws = async (req, env) => {
             } catch (e) {
                 err = e;
             }
-            if (retryCount >= 3) {
-                log(`[FuckTCP] [proxyip代理] 已尝试 ${retryCount} 个候选，全部失败，准备兜底 | 目标=${route.host}:${route.port}`);
-                break;
-            }
         }
-        // 全部候选失败：清空解析缓存，下次请求重新 DoH（对齐 worker.js 缓存返袋解析数组 = null）
         proxyCacheList = null;
         proxyCacheHost = '';
         proxyCacheIndex = 0;
-        // 兜底：直连 DEF_PROXY_HOST 域名，不走探活（对齐 worker.js 返袋兜底逻辑）
         warn(`[FuckTCP] [proxyip兜底] 候选全部失败，直连兜底 | ${DEF_PROXY_HOST}:${DEF_PROXY_PORT}`);
         try {
-            const {s, w} = await openConn(DEF_PROXY_HOST, DEF_PROXY_PORT, route.parts, 'proxyip兜底');
+            const { s, w } = await openConn(DEF_PROXY_HOST, DEF_PROXY_PORT, route.parts, 'proxyip兜底');
             setConn(s, w);
             sealReplay();
             runPipe(s, false);
@@ -553,11 +516,16 @@ const ws = async (req, env) => {
         wither();
         return 0;
     };
+    const sendAck = version => {
+        const resp = new Uint8Array(2);
+        resp[0] = version;
+        server.send(resp);
+    };
     const thresh = async () => {
         if (busy || closed) return;
         busy = true;
         try {
-            for (; ;) {
+            for (;;) {
                 if (closed) break;
                 if (!sock) {
                     const [d] = uq.bundle();
@@ -568,13 +536,13 @@ const ws = async (req, env) => {
                         wither();
                         return;
                     }
-                    server.send(new Uint8Array([d[0], 0]));
+                    sendAck(d[0]);
                     const host = addr(r.addrType, r.targetAddrBytes), port = r.port, payload = d.subarray(r.dataOffset), [first] = uq.bundle(payload);
                     const seed = (first || payload).slice();
-                    route = {host, port, parts: [seed], bytes: seed.byteLength, ack: 0};
+                    route = { host, port, parts: [seed], bytes: seed.byteLength, ack: 0 };
                     log(`[FuckTCP] 解析目标成功 | 目标=${host}:${port} | 首包=${seed.byteLength} bytes | 直连优先=${!proxyIP}`);
                     try {
-                        const {s, w} = await openConn(host, port, route.parts, '直连');
+                        const { s, w } = await openConn(host, port, route.parts, '直连');
                         setConn(s, w);
                         log(`[FuckTCP] [直连] 已接入链路 | 目标=${host}:${port}`);
                         runPipe(s, true);
@@ -594,7 +562,7 @@ const ws = async (req, env) => {
             wither();
         } finally {
             busy = false;
-            !uq.empty && !closed && queueMicrotask(thresh);
+            !uq.empty && !closed && thresh();
         }
     };
     if (ed && sow(ed)) thresh();
@@ -603,8 +571,9 @@ const ws = async (req, env) => {
     });
     server.addEventListener('close', () => wither());
     server.addEventListener('error', () => wither());
-    return new Response(null, {status: 101, webSocket: client, headers: {'Sec-WebSocket-Extensions': ''}});
+    return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Extensions': '' } });
 };
+
 
 
 function processNoneWebSocket(request) {

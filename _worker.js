@@ -180,7 +180,7 @@ export default {
                     return new Response(JSON.stringify(config_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
                 } else if (区分大小写访问路径 === 'admin/ADD.txt') {// 处理 admin/ADD.txt 请求，返回本地优选IP
                     let 本地优选IP = await env.KV.get('ADD.txt') || 'null';
-                    if (本地优选IP == 'null') 本地优选IP = (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[1];
+                    if (本地优选IP == 'null') 本地优选IP = (await 生成随机IP(env, request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[1];
                     return new Response(本地优选IP, { status: 200, headers: { 'Content-Type': 'text/plain;charset=utf-8', 'asn': request.cf.asn } });
                 } else if (访问路径 === 'admin/cf.json') {// CF配置文件
                     return new Response(JSON.stringify(request.cf, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
@@ -257,7 +257,7 @@ export default {
                         let 完整优选IP = [], 其他节点LINK = '', 反代IP池 = [];
 
                         if (!url.searchParams.has('sub') && config_JSON.优选订阅生成.local) { // 本地生成订阅
-                            const 完整优选列表 = config_JSON.优选订阅生成.本地IP库.随机IP ? (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[0] : await env.KV.get('ADD.txt') ? await 整理成数组(await env.KV.get('ADD.txt')) : (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[0];
+                            const 完整优选列表 = config_JSON.优选订阅生成.本地IP库.随机IP ? (await 生成随机IP(env, request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[0] : await env.KV.get('ADD.txt') ? await 整理成数组(await env.KV.get('ADD.txt')) : (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[0];
                             const 优选API = [], 优选IP = [], 其他节点 = [];
                             for (const 元素 of 完整优选列表) {
                                 if (元素.toLowerCase().startsWith('sub://')) {
@@ -1272,20 +1272,21 @@ async function 读取config_JSON(env, hostname, userID, 重置配置 = false) {
     return config_JSON;
 }
 
-async function 生成随机IP(request, count = 16, 指定端口 = -1) {
+async function 生成随机IP(env, request, count = 16, 指定端口 = -1) {
     const totalCount = Math.max(0, Number.parseInt(count, 10) || 0);
     const ISP配置 = {
         'cmcc': { name: '移动', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cmcc.txt` },
         'cu': { name: '联通', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
-        'ct': { name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/master/ct.txt` },
-        // '4134': { file: 'ct', name: '电信', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/ct.txt` },
+        // 'ct': { name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/refs/heads/master/CT-SG.txt` },
+        // 'ct': { name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/refs/heads/master/CT-JP.txt` },
+        'ct': { name: '电信', url: env.IP_FILE || `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/ct.txt` },
     };
-    const 运营商名称映射 = {
-        cmcc: '移动优选',
-        cu: '联通优选',
-        ct: '电信优选',
-        cf: '官方优选',
-    };
+    // const 运营商名称映射 = {
+    //     cmcc: '移动优选',
+    //     cu: '联通优选',
+    //     ct: '电信优选',
+    //     cf: '官方优选',
+    // };
     const url = new URL(request.url);
     const 查询参数运营商 = String(url.searchParams.get('asOrg') || '').toLowerCase();
     const 运营商文件标识 = ['ct', 'cu', 'cmcc', 'cf'].includes(查询参数运营商) ? 查询参数运营商 : 识别运营商(request);

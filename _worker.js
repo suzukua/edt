@@ -1277,9 +1277,7 @@ async function 生成随机IP(env, request, count = 16, 指定端口 = -1) {
     const ISP配置 = {
         'cmcc': { name: '移动', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cmcc.txt` },
         'cu': { name: '联通', url: `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/cu.txt` },
-        // 'ct': { name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/refs/heads/master/CT-SG.txt` },
-        // 'ct': { name: '电信', url: `https://raw.githubusercontent.com/suzukua/gfwlist2dnsmasq/refs/heads/master/CT-JP.txt` },
-        'ct': { name: '电信', url: env.IP_FILE || `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/ct.txt` },
+        'ct': { name: '电信', url: await env.KV.get('IP_FILE') || `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/ct.txt` },
     };
     // const 运营商名称映射 = {
     //     cmcc: '移动优选',
@@ -1292,7 +1290,7 @@ async function 生成随机IP(env, request, count = 16, 指定端口 = -1) {
     const 运营商文件标识 = ['ct', 'cu', 'cmcc', 'cf'].includes(查询参数运营商) ? 查询参数运营商 : 识别运营商(request);
     const isp = ISP配置[运营商文件标识];
     console.log(`【生成随机IP】识别运营商: ${运营商文件标识 || '未知'} 查询参数运营商: ${查询参数运营商 || '无'}`);
-    const cidr_url = isp ? isp.url : 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
+    const cidr_url = isp?.url || 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
     const cfname = isp.name || 'CF官方优选';
     const cfport = [443, 2053, 2083, 2087, 2096, 8443];
     const 默认IPv4CIDR = ['104.16.0.0/13'];

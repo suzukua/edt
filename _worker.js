@@ -1320,7 +1320,7 @@ async function 生成随机IP(env, request, count = 16, 指定端口 = -1) {
         }
     };
 
-    const cidrRawList = await 获取CIDR原始列表(cidr_url);
+    const cidrRawList = cidr_url.startsWith("http") ? await 获取CIDR原始列表(cidr_url) : await 整理成数组(cidr_url);
     console.log(cidr_url, '获取到的CIDR数量:', cidrRawList.length, " 需要混合生成: " + 需要混合生成);
     const ipv4CidrList = 过滤指定版本CIDR(cidrRawList, 4);
     const ipv6CidrList = 需要混合生成 ? 过滤指定版本CIDR(cidrRawList, 6) : [];

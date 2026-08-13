@@ -1,5 +1,5 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "ty-do"
+name = "ty-do-jp"
 main = "src/vIndex.js"
 compatibility_date = "2026-05-26"
 secrets_store_secrets = [

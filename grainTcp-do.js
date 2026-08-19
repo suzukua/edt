@@ -35,7 +35,7 @@ export default {
         if (stub) {
             return stub.fetch(req, {headers: {...Object.fromEntries(req.headers), "userid": CFG.id}});
         } else {
-            return processReq(req, this.env);
+            return processReq(req, env);
         }
     }
 };
@@ -73,8 +73,14 @@ export class WsBigDo extends DurableObject {
 
 
 async function processReq(req, env) {
-    if (!CFG.id && env.xxoo && env.xxoo.get) {
-        CFG.id = await env.xxoo.get()
+    if (!CFG.id) {
+        if (env.xxoo) {
+            if (env.xxoo.get){
+                CFG.id = await env.xxoo.get()
+            } else {
+                CFG.id = env.xxoo
+            }
+        }
     }
     if (CFG.id && !idB) {
         const out = new Uint8Array(16), id = CFG.id;

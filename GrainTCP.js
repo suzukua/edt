@@ -173,6 +173,35 @@ const checkProxy = async (host, port) => {
         clearTimeout(timer);
     }
 };
+
+const checkProxyCm = async (host, port) => {
+    const candidate = `${host}:${port}`;
+    log(`[FuckTCP] [proxyip cm 检测] 开始检测 | candidate=${candidate}`);
+    const testApi = `${atob('aHR0cHM6Ly9hcGkuY2hlY2sucHJveHlpcC5jbWxpdXNzc3MubmV0L2NoZWNrP3Byb3h5aXA9')}${candidate}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+    try {
+        const response = await fetch(testApi, {
+            signal: controller.signal,
+            cf: {
+                cacheEverything: true,
+                cacheKey: testApi,
+                cacheTtlByStatus: { '200-299': 60, '400-599': 0 }
+            }
+        });
+        const result = await response.json();
+        if (!result?.success) {
+            warn(`[FuckTCP] [proxyip cm 检测] 不可用 | candidate=${candidate}`);
+            throw new Error(`proxyip unavailable：${candidate}`);
+        }
+        log(`[FuckTCP] [proxyip cm 检测] 可用 | candidate=${result.candidate || candidate} `);
+    } catch (e) {
+        warn(`[FuckTCP] [proxyip cm 检测] 探活异常 | prxip：${candidate} | 错误：${fmtErr(e)}`);
+        throw e;
+    } finally {
+        clearTimeout(timer);
+    }
+};
 const vls = c => {
     if (c.length < 24 || !matchID(c)) return null;
     let o = 19 + c[17];
@@ -429,6 +458,18 @@ const ws = async (req, env) => {
                 runPipe(s, false);
                 return;
             } catch (e) {
+                try {
+                    await checkProxyCm(host, port);
+                    const { s, w } = await openConn(host, port, route.parts, `proxyip代理 ${i + 1}/${proxyList.length}`);
+                    setConn(s, w);
+                    sealReplay();
+                    proxyCacheIndex = i;
+                    log(`[FuckTCP] [proxyip cm 代理] 已接管链路 | 目标=${route.host}:${route.port} | 出口=${host}:${port}`);
+                    runPipe(s, false);
+                    return;
+                } catch (e) {
+                    // err = e;
+                }
                 err = e;
             }
         }

@@ -163,7 +163,7 @@ const checkProxy = async (host, port) => {
         const result = await response.json();
         if (!result?.ok) {
             warn(`[FuckTCP] [proxyip检测] 不可用 | candidate=${candidate}`);
-            throw new Error('proxyip unavailable');
+            throw new Error(`proxyip unavailable：${candidate}`);
         }
         log(`[FuckTCP] [proxyip检测] 可用 | candidate=${result.candidate || candidate} `);
     } catch (e) {

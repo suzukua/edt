@@ -13,7 +13,7 @@ const CFG = {
     maxED: 8 * 1024,
     concur: 4
 };
-const DEF_PROXY_HOST = atob('UHJveHlJUC5DTUxpdXNzc3MubmV0');
+const DEF_PROXY_HOST = atob('UHJveHlJUC5KUC5DTUxpdXNzc3MubmV0');
 const DEF_PROXY_PORT = 443;
 const fmtErr = e => e?.message || e;
 const log = (...args) => {
@@ -500,7 +500,7 @@ const ws = async (req, env) => {
         for (const i of order) {
             const [host, port] = proxyList[i];
             try {
-                await checkProxy(host, port);
+                // await checkProxy(host, port);
                 const { s, w } = await openConn(host, port, route.parts, `proxyip代理 ${i + 1}/${proxyList.length}`);
                 setConn(s, w);
                 sealReplay();
@@ -509,18 +509,6 @@ const ws = async (req, env) => {
                 runPipe(s, false);
                 return;
             } catch (e) {
-                try {
-                    await checkProxyCm(host, port);
-                    const { s, w } = await openConn(host, port, route.parts, `proxyip代理 ${i + 1}/${proxyList.length}`);
-                    setConn(s, w);
-                    sealReplay();
-                    proxyCacheIndex = i;
-                    log(`[FuckTCP] [proxyip cm 代理] 已接管链路 | 目标=${route.host}:${route.port} | 出口=${host}:${port}`);
-                    runPipe(s, false);
-                    return;
-                } catch (e) {
-                    // err = e;
-                }
                 err = e;
             }
         }

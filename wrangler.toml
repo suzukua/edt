@@ -1,6 +1,6 @@
 #:schema node_modules/wrangler/config-schema.json
 name = "ty-do-jp1"
-main = "src/vIndex.js"
+main = "grainTcp-do.js"
 compatibility_date = "2026-05-26"
 secrets_store_secrets = [
     { binding = "xxoo", store_id= "6df4b8ca560d45a7adcdc8fe96c56658", secret_name = "xxoo" }

@@ -1,4 +1,4 @@
-﻿let 调试日志打印 = false;
+﻿let DEBUG_MODE = false;
 let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
 const WS早期数据最大字节 = 8 * 1024, WS早期数据最大头长度 = Math.ceil(WS早期数据最大字节 * 4 / 3) + 4;
 const 上行合包目标字节 = 20 * 1024, 上行队列最大字节 = 16 * 1024 * 1024, 上行队列最大条目 = 4096;
@@ -24,7 +24,7 @@ export default {
 		const envUUID = env.xxoo || env.XXOO;
 		const userID = envUUID ? envUUID.toLowerCase() : '';
 		const 访问路径 = url.pathname.slice(1).toLowerCase();
-		调试日志打印 = ['1', 'true'].includes(env.DEBUG) || 调试日志打印;
+		DEBUG_MODE = ['1', 'true'].includes(env.DEBUG) || DEBUG_MODE;
 		预加载竞速拨号 = ['1', 'true'].includes(env.PRELOAD_RACE_DIAL) || 预加载竞速拨号;
 		反代并发拨号数 = Math.max(1, Number(env.PROXY_CONCURRENT_DIAL) || 反代并发拨号数);
 		TCP并发拨号数 = Math.max(1, Number(env.TCP_CONCURRENT_DIAL) || TCP并发拨号数);
@@ -1853,22 +1853,6 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, is
 	closeSocketQuietly(webSocket);
 }
 
-function 构造本地204响应(respHeader = null) {
-	const 本地204响应 = new TextEncoder().encode(
-		'HTTP/1.1 204 No Content\r\n' +
-		'Content-Length: 0\r\n' +
-		'Connection: close\r\n' +
-		'\r\n'
-	);
-	if (有效数据长度(respHeader) === 0) return 本地204响应;
-	const 协议响应头 = 数据转Uint8Array(respHeader);
-	const response = new Uint8Array(协议响应头.byteLength + 本地204响应.byteLength);
-	response.set(协议响应头, 0);
-	response.set(本地204响应, 协议响应头.byteLength);
-	log(`[TCP转发] 构造本地204响应: ${response.byteLength}B`);
-	return response;
-}
-
 function 构造WS本地204响应(respHeader = null) {
 	const WS本地204响应 = new TextEncoder().encode(
 		'HTTP/1.1 204 No Content\r\n' +
@@ -1914,47 +1898,8 @@ function isIPv4(value) {
 	return parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
 }
 
-/**
- * 带秘钥的 Base64 解码
- * @param {string} encoded - 经秘钥处理过的 Base64 字符串
- * @param {string} secret - 秘钥字符串（必须与编码时相同）
- * @returns {string} 解码后的原始明文字符串
- */
-function base64SecretDecode(encoded, secret) {
-	const binary = atob(encoded);
-	const mixed = new Uint8Array(binary.length);
-	for (let i = 0; i < binary.length; i++) {
-		mixed[i] = binary.charCodeAt(i);
-	}
-
-	const encoder = new TextEncoder();
-	const key = encoder.encode(secret);
-	const data = new Uint8Array(mixed.length);
-
-	for (let i = 0; i < mixed.length; i++) {
-		data[i] = mixed[i] ^ key[i % key.length];
-	}
-
-	const decoder = new TextDecoder();
-	return decoder.decode(data);
-}
-
 function log(...args) {
-	if (调试日志打印) console.log(...args);
-}
-
-async function MD5MD5(文本) {
-	const 编码器 = new TextEncoder();
-
-	const 第一次哈希 = await crypto.subtle.digest('MD5', 编码器.encode(文本));
-	const 第一次哈希数组 = Array.from(new Uint8Array(第一次哈希));
-	const 第一次十六进制 = 第一次哈希数组.map(字节 => 字节.toString(16).padStart(2, '0')).join('');
-
-	const 第二次哈希 = await crypto.subtle.digest('MD5', 编码器.encode(第一次十六进制.slice(7, 27)));
-	const 第二次哈希数组 = Array.from(new Uint8Array(第二次哈希));
-	const 第二次十六进制 = 第二次哈希数组.map(字节 => 字节.toString(16).padStart(2, '0')).join('');
-
-	return 第二次十六进制.toLowerCase();
+	if (DEBUG_MODE) console.log(...args);
 }
 
 const DoH缓存 = {};
@@ -2160,8 +2105,6 @@ async function 整理成数组(内容) {
 
 async function 反代参数获取(url, uuid, 默认反代IP = '', 默认反代兜底 = true) {
 	const { searchParams } = url;
-	const pathname = decodeURIComponent(url.pathname);
-	const pathLower = pathname.toLowerCase();
 	let 反代IP = 默认反代IP, 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {}, 启用反代兜底 = 默认反代兜底;
 	const 反代上下文 = { 反代IP, 代理类型: null, 代理账号: '', 代理全局: false, 代理参数: {}, 反代兜底: 启用反代兜底 };
 	const 保存快照 = () => {
@@ -2172,41 +2115,6 @@ async function 反代参数获取(url, uuid, 默认反代IP = '', 默认反代�
 		反代上下文.代理参数 = { ...parsedSocks5Address };
 		反代上下文.反代兜底 = 启用反代兜底;
 	};
-
-	const 链式代理路径匹配 = pathname.match(/\/video\/(.+)$/i);
-	if (链式代理路径匹配) {
-		try {
-			const 链式代理明文 = base64SecretDecode(链式代理路径匹配[1].replace(/\/+$/, ''), uuid);
-			const { type, ...链式代理地址 } = JSON.parse(链式代理明文);
-			if (!type || !反代协议默认端口[String(type).toLowerCase()]) throw new Error('链式代理类型无效');
-			if (!链式代理地址.hostname || !链式代理地址.port) throw new Error('链式代理地址缺少 hostname 或 port');
-			我的SOCKS5账号 = '';
-			反代IP = '链式代理';
-			启用反代兜底 = false;
-			启用SOCKS5全局反代 = true;
-			启用SOCKS5反代 = String(type).toLowerCase();
-			parsedSocks5Address = {
-				username: 链式代理地址.username,
-				password: 链式代理地址.password,
-				hostname: 链式代理地址.hostname,
-				port: Number(链式代理地址.port)
-			};
-			if (isNaN(parsedSocks5Address.port)) throw new Error('链式代理端口无效');
-			保存快照();
-			return 反代上下文;
-		} catch (err) {
-			console.error('解析链式代理参数失败:', err.message);
-		}
-	}
-
-	我的SOCKS5账号 = searchParams.get('socks5') || searchParams.get('http') || searchParams.get('https') || searchParams.get('turn') || searchParams.get('sstp') || null;
-	启用SOCKS5全局反代 = searchParams.has('globalproxy');
-	if (searchParams.get('socks5')) 启用SOCKS5反代 = 'socks5';
-	else if (searchParams.get('http')) 启用SOCKS5反代 = 'http';
-	else if (searchParams.get('https')) 启用SOCKS5反代 = 'https';
-	else if (searchParams.get('turn')) 启用SOCKS5反代 = 'turn';
-	else if (searchParams.get('sstp')) 启用SOCKS5反代 = 'sstp';
-
 	const 解析代理URL = (值, 强制全局 = true) => {
 		const 匹配 = /^(socks5|http|https|turn|sstp):\/\/(.+)$/i.exec(值 || '');
 		if (!匹配) return false;
@@ -2221,18 +2129,6 @@ async function 反代参数获取(url, uuid, 默认反代IP = '', 默认反代�
 		启用SOCKS5反代 = null;
 		启用反代兜底 = false;
 	};
-
-	const 提取路径值 = (值) => {
-		if (!值.includes('://')) {
-			const 斜杠索引 = 值.indexOf('/');
-			return 斜杠索引 > 0 ? 值.slice(0, 斜杠索引) : 值;
-		}
-		const 协议拆分 = 值.split('://');
-		if (协议拆分.length !== 2) return 值;
-		const 斜杠索引 = 协议拆分[1].indexOf('/');
-		return 斜杠索引 > 0 ? `${协议拆分[0]}://${协议拆分[1].slice(0, 斜杠索引)}` : 值;
-	};
-
 	const 查询反代IP = searchParams.get('proxyip');
 	if (查询反代IP !== null) {
 		if (!解析代理URL(查询反代IP)) {
@@ -2240,87 +2136,9 @@ async function 反代参数获取(url, uuid, 默认反代IP = '', 默认反代�
 			保存快照();
 			return 反代上下文;
 		}
-	} else {
-		let 匹配 = /\/(socks5?|http|https|turn|sstp):\/?\/?([^/?#\s]+)/i.exec(pathname);
-		if (匹配) {
-			const 类型 = 匹配[1].toLowerCase();
-			启用SOCKS5反代 = 类型 === 'sock' || 类型 === 'socks' ? 'socks5' : 类型;
-			我的SOCKS5账号 = 匹配[2].split('/')[0];
-			启用SOCKS5全局反代 = true;
-		} else if ((匹配 = /\/(g?s5|socks5|g?http|g?https|g?turn|g?sstp)=([^/?#\s]+)/i.exec(pathname))) {
-			const 类型 = 匹配[1].toLowerCase();
-			我的SOCKS5账号 = 匹配[2].split('/')[0];
-			启用SOCKS5反代 = 类型.includes('sstp') ? 'sstp' : (类型.includes('turn') ? 'turn' : (类型.includes('https') ? 'https' : (类型.includes('http') ? 'http' : 'socks5')));
-			if (类型.startsWith('g')) 启用SOCKS5全局反代 = true;
-		} else if ((匹配 = /\/(proxyip[.=]|pyip=|ip=)([^?#\s]+)/.exec(pathLower))) {
-			const 路径反代值 = 提取路径值(匹配[2]);
-			if (!解析代理URL(路径反代值)) {
-				设置反代IP(路径反代值);
-				保存快照();
-				return 反代上下文;
-			}
-		}
-	}
-
-	if (!我的SOCKS5账号) {
-		启用SOCKS5反代 = null;
-		保存快照();
-		return 反代上下文;
-	}
-
-	try {
-		parsedSocks5Address = await 获取SOCKS5账号(我的SOCKS5账号, 获取代理默认端口(启用SOCKS5反代));
-		if (searchParams.get('socks5')) 启用SOCKS5反代 = 'socks5';
-		else if (searchParams.get('http')) 启用SOCKS5反代 = 'http';
-		else if (searchParams.get('https')) 启用SOCKS5反代 = 'https';
-		else if (searchParams.get('turn')) 启用SOCKS5反代 = 'turn';
-		else if (searchParams.get('sstp')) 启用SOCKS5反代 = 'sstp';
-		else 启用SOCKS5反代 = 启用SOCKS5反代 || 'socks5';
-	} catch (err) {
-		console.error('解析SOCKS5地址失败:', err.message);
-		启用SOCKS5反代 = null;
 	}
 	保存快照();
 	return 反代上下文;
-}
-
-const 反代协议默认端口 = { socks5: 1080, http: 80, https: 443, turn: 3478, sstp: 443 };
-function 获取代理默认端口(类型) {
-	return 反代协议默认端口[String(类型 || '').toLowerCase()] || 80;
-}
-
-const SOCKS5账号Base64正则 = /^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i, IPv6方括号正则 = /^\[.*\]$/;
-function 获取SOCKS5账号(address, 默认端口 = 80) {
-	address = String(address || '').trim().replace(/^(socks5|http|https|turn|sstp):\/\//i, '').split('#')[0].trim();
-	const firstAt = address.lastIndexOf("@");
-	if (firstAt !== -1) {
-		let auth = address.slice(0, firstAt).replaceAll("%3D", "=");
-		if (!auth.includes(":") && SOCKS5账号Base64正则.test(auth)) auth = atob(auth);
-		address = `${auth}@${address.slice(firstAt + 1)}`;
-	}
-
-	const atIndex = address.lastIndexOf("@");
-	const hostPart = (atIndex === -1 ? address : address.slice(atIndex + 1)).split('/')[0];
-	const authPart = atIndex === -1 ? "" : address.slice(0, atIndex);
-	const [username, password] = authPart ? authPart.split(":") : [];
-	if (authPart && !password) throw new Error('无效的 SOCKS 地址格式：认证部分必须是 "username:password" 的形式');
-
-	let hostname = hostPart, port = 默认端口;
-	if (hostPart.includes("]:")) {
-		const [ipv6Host, ipv6Port = ""] = hostPart.split("]:");
-		hostname = ipv6Host + "]";
-		port = Number(ipv6Port.replace(/[^\d]/g, ""));
-	} else if (!hostPart.startsWith("[")) {
-		const parts = hostPart.split(":");
-		if (parts.length === 2) {
-			hostname = parts[0];
-			port = Number(parts[1].replace(/[^\d]/g, ""));
-		}
-	}
-
-	if (isNaN(port)) throw new Error('无效的 SOCKS 地址格式：端口号必须是数字');
-	if (hostname.includes(":") && !IPv6方括号正则.test(hostname)) throw new Error('无效的 SOCKS 地址格式：IPv6 地址必须用方括号括起来，如 [2001:db8::1]');
-	return { username, password, hostname, port };
 }
 
 function sha224(s) {

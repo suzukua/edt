@@ -373,9 +373,9 @@ export default {
 							}
 							const ECHLINK参数 = config_JSON.ECH ? `&ech=${encodeURIComponent((config_JSON.ECHConfig.SNI ? config_JSON.ECHConfig.SNI + '+' : '') + config_JSON.ECHConfig.DNS)}` : '';
 							const isLoonOrSurge = ua.includes('loon') || ua.includes('surge');
-                            if (isLoonOrSurge) {
-                                config_JSON.传输协议 = `ws` // loon不支持xhttp
-                            }
+                            // if (isLoonOrSurge) {
+                            //     config_JSON.传输协议 = `ws` // loon不支持xhttp
+                            // }
 							const { type: 传输协议, 路径字段名, 域名字段名 } = 获取传输协议配置(config_JSON);
 							订阅内容 = 其他节点LINK + 完整优选IP.map(原始地址 => {
 								// 统一正则: 匹配 域名/IPv4/IPv6地址 + 可选端口 + 可选备注
@@ -3273,7 +3273,7 @@ async function 自定义订阅支持IPCIDR(ipcidrContent, request, count = 16, �
     console.log(`【生成随机IP】 查询参数运营商: ${查询参数运营商 || '无'}`);
     const cfport = [443, 2053, 2083, 2087, 2096, 8443];
     console.log(url.toString())
-    const 需要混合生成 = url.searchParams.get("ipv6") != '0' || (!url.searchParams.has("ipv6") && 判断IP版本(request.headers.get("CF-Connecting-IP") || '') == 6);
+    const 需要混合生成 = url.searchParams.get("ipv6") === '1' || (!url.searchParams.has("ipv6") && 判断IP版本(request.headers.get("CF-Connecting-IP") || '') == 6);
     console.log(`需要混合生成: ${需要混合生成} |||||| `, url.searchParams.get("ipv6"), url.searchParams.has("ipv6"), 判断IP版本(request.headers.get("CF-Connecting-IP") || ''))
 
     const 过滤指定版本CIDR = (cidrList, ipVersion) => cidrList.filter(cidr => {
